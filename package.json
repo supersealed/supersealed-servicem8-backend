@@ -1,18 +1,19 @@
 {
-  "name": "supersealed-servicem8-backend",
-  "version": "1.0.0",
-  "description": "ServiceM8 API integration backend for SuperSealed",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "express": "^4.18.2",
-    "axios": "^1.6.2",
-    "cors": "^2.8.5"
-  }
+    "name": "supersealed-servicem8-backend",
+    "version": "1.0.0",
+    "description": "ServiceM8 API integration backend for SuperSealed",
+    "main": "index.js",
+    "scripts": {
+          "start": "node index.js",
+          "dev": "node index.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+          "express": "^4.18.2",
+          "axios": "^1.6.2",
+          "cors": "^2.8.5",
+          "@vercel/kv": "^3.0.0"
+    }
 }
