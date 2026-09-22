@@ -1064,6 +1064,10 @@
                             <div class="metric-label">Quotes Booked</div>
                             <div class="metric-value" id="metric-quotes-booked">0</div>
                         </div>
+                        <div class="metric-card success">
+                            <div class="metric-label">Jobs Approved Today</div>
+                            <div class="metric-value" id="metric-approved-today">0</div>
+                        </div>
                     </div>
 
                     <div class="card-grid">
@@ -2021,7 +2025,7 @@
             const today = new Date().toISOString().split('T')[0];
 
             let newToday = 0, notContacted = 0, qualified = 0, quotesBooked = 0;
-            let waitingPhotos = 0, followupToday = 0, overdue = 0, escalations = 0;
+            let waitingPhotos = 0, followupToday = 0, overdue = 0, escalations = 0, approvedToday = 0;
 
             enquiries.forEach(e => {
                 if (e.created === today && e.status === 'NEW – NOT CONTACTED') newToday++;
@@ -2032,6 +2036,7 @@
                 if (e.nextActionDue === today && ['NEW – NOT CONTACTED', 'CONTACTED', 'QUALIFIED', 'WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED'].includes(e.status)) followupToday++;
                 if (e.nextActionDue && e.nextActionDue < today && ['NEW – NOT CONTACTED', 'CONTACTED', 'QUALIFIED', 'WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED'].includes(e.status)) overdue++;
                 if (e.status === 'ESCALATE TO MANAGER') escalations++;
+                if (e.approvedDate === today) approvedToday++;
             });
 
             document.getElementById('metric-new-today').textContent = newToday;
@@ -2042,6 +2047,7 @@
             document.getElementById('metric-followup-today').textContent = followupToday;
             document.getElementById('metric-overdue').textContent = overdue;
             document.getElementById('metric-escalations').textContent = escalations;
+            document.getElementById('metric-approved-today').textContent = approvedToday;
 
             // Recent activity
             let tbody = document.getElementById('dashboard-recent');
@@ -2943,14 +2949,18 @@
             }
         };
 
-        // Map a real ServiceM8 job status (text value) to a dashboard status
-        function mapJobStatusToDashboardStatus(jobStatus) {
+        // Map a real ServiceM8 job status (text value) to a dashboard status.
+        // hasQuoteDate = true when ServiceM8 has a quote/site-visit date scheduled on the job -
+        // that's what separates "Qualified" (quote not yet booked) from "Quotes Booked"
+        // (a quote appointment date exists), since ServiceM8's own status field doesn't
+        // distinguish the two on its own.
+        function mapJobStatusToDashboardStatus(jobStatus, hasQuoteDate) {
             switch (jobStatus) {
                 case 'Work Order': return 'JOB BOOKED';
                 case 'Completed': return 'JOB BOOKED';
                 case 'Unsuccessful': return 'NOT PROCEEDING';
                 case 'Quote':
-                default: return 'QUALIFIED';
+                default: return hasQuoteDate ? 'QUOTE APPOINTMENT BOOKED' : 'QUALIFIED';
             }
         }
 
@@ -2986,18 +2996,22 @@
                 service: 'Service Required',
                 source: 'ServiceM8',
                 description: job.job_description || '',
-                status: mapJobStatusToDashboardStatus(job.status),
+                status: mapJobStatusToDashboardStatus(job.status, !!validQuoteDate),
                 assignedTo: '',
                 created: createdDate,
                 createdTime: formattedTime,
-                nextActionDue: job.status === 'Quote' ? createdDate : null,
-                nextActionType: job.status === 'Quote' ? 'FOLLOW-UP' : (job.status === 'Work Order' ? 'SCHEDULE APPOINTMENT' : ''),
+                nextActionDue: job.status === 'Quote' ? (validQuoteDate || createdDate) : null,
+                nextActionType: job.status === 'Quote' ? (validQuoteDate ? 'QUOTE APPOINTMENT' : 'FOLLOW-UP') : (job.status === 'Work Order' ? 'SCHEDULE APPOINTMENT' : ''),
                 servicem8Ref: job.uuid,
                 servicem8Status: job.status,
                 quoteDate: validQuoteDate,
                 quoteTime: '',
                 visitAddress: job.job_address || '',
                 quoteRef: job.generated_job_id || job.uuid,
+                // Set only when a sync observes this job move from Quote to Work Order -
+                // powers the "Jobs Approved Today" tile. Left unset here; the sync loop
+                // stamps it (and carries it forward) since only it can compare old vs new status.
+                approvedDate: null,
                 history: [
                     {
                         date: formattedDate,
@@ -3085,6 +3099,14 @@
                         // Preserve local history and staff assignment - don't clobber work already done in the dashboard
                         updatedEnquiry.history = existingEnquiry.history || [];
                         updatedEnquiry.assignedTo = existingEnquiry.assignedTo;
+
+                        // Jobs Approved Today: stamp the date the very first time we see this
+                        // job cross Quote -> Work Order, and carry that date forward on every
+                        // later sync so it doesn't get overwritten or lost.
+                        updatedEnquiry.approvedDate = existingEnquiry.approvedDate || null;
+                        if (job.status === 'Work Order' && existingEnquiry.servicem8Status === 'Quote' && !updatedEnquiry.approvedDate) {
+                            updatedEnquiry.approvedDate = new Date().toISOString().split('T')[0];
+                        }
 
                         updatedEnquiry.history.push({
                             date: new Date().toISOString().split('T')[0],
