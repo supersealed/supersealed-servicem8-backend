@@ -2949,6 +2949,35 @@
             }
         };
 
+        // Lead-source badges (Settings > Badges in ServiceM8) mapped to the dashboard's
+        // canonical lead-source values (same ones used by the Add Enquiry form and the
+        // Lead Source Report: Google / Meta / Website / Phone / Referral / Returning).
+        // Keyed by badge UUID rather than name, since a badge's name can be edited in
+        // ServiceM8 without changing what it actually represents.
+        const LEAD_SOURCE_BADGE_MAP = {
+            '019fa7b0-9fb1-7eda-aa25-cacd125a820b': 'Google',  // "Google Ads" badge
+            '019fa7b1-4f97-7eda-aa25-5532685e3cab': 'Meta',    // "Facebook / Instagram" badge
+            '019fa7b1-ca50-7eda-aa24-7a533928b6bb': 'Website', // "Website Enquiry" badge
+            '7b8c6b73-1789-4bb4-b587-2006ecfa078b': 'Phone',   // "Telephone" badge
+        };
+
+        // job.badges comes back from ServiceM8 as a JSON-encoded string of badge UUIDs
+        // (e.g. '["019fa7b1-...", ...]'), not an array - parse defensively since a job
+        // with no badges may return '[]', null, or be missing the field entirely.
+        function resolveLeadSourceFromBadges(badgesField) {
+            let uuids = [];
+            try {
+                uuids = JSON.parse(badgesField || '[]');
+            } catch (e) {
+                uuids = [];
+            }
+            if (!Array.isArray(uuids)) return null;
+            for (const uuid of uuids) {
+                if (LEAD_SOURCE_BADGE_MAP[uuid]) return LEAD_SOURCE_BADGE_MAP[uuid];
+            }
+            return null;
+        }
+
         // Map a real ServiceM8 job status (text value) to a dashboard status.
         // hasQuoteDate = true when ServiceM8 has a quote/site-visit date scheduled on the job -
         // that's what separates "Qualified" (quote not yet booked) from "Quotes Booked"
@@ -2994,7 +3023,10 @@
                 suburb: suburb,
                 address: job.job_address || '',
                 service: 'Service Required',
-                source: 'ServiceM8',
+                // Falls back to the generic 'ServiceM8' bucket when none of the 4
+                // lead-source badges (Google Ads/Facebook-Instagram/Website Enquiry/
+                // Telephone) is on the job - matches prior behaviour for untagged jobs.
+                source: resolveLeadSourceFromBadges(job.badges) || 'ServiceM8',
                 description: job.job_description || '',
                 status: mapJobStatusToDashboardStatus(job.status, !!validQuoteDate),
                 assignedTo: '',
@@ -3003,6 +3035,10 @@
                 nextActionDue: job.status === 'Quote' ? (validQuoteDate || createdDate) : null,
                 nextActionType: job.status === 'Quote' ? (validQuoteDate ? 'QUOTE APPOINTMENT' : 'FOLLOW-UP') : (job.status === 'Work Order' ? 'SCHEDULE APPOINTMENT' : ''),
                 servicem8Ref: job.uuid,
+                // Raw badges JSON as last seen from ServiceM8 - lets the sync loop detect
+                // a badge change (e.g. staff clicking a lead-source badge) even when the
+                // job's status hasn't changed, so the source above stays up to date.
+                servicem8Badges: job.badges || '[]',
                 servicem8Status: job.status,
                 quoteDate: validQuoteDate,
                 quoteTime: '',
@@ -3093,7 +3129,10 @@
                     if (!existingEnquiry) {
                         enquiries.push(mapServiceM8JobToEnquiry(job, company, contact));
                         newEnquiries++;
-                    } else if (existingEnquiry.servicem8Status !== job.status) {
+                    } else if (existingEnquiry.servicem8Status !== job.status || existingEnquiry.servicem8Badges !== (job.badges || '[]')) {
+                        // Also re-syncs on a badge-only change (status unchanged) so that
+                        // clicking a lead-source badge in ServiceM8 updates the dashboard's
+                        // Lead Source on the next sync, not just on status transitions.
                         const updatedEnquiry = mapServiceM8JobToEnquiry(job, company, contact);
 
                         // Preserve local history and staff assignment - don't clobber work already done in the dashboard
@@ -3108,12 +3147,19 @@
                             updatedEnquiry.approvedDate = new Date().toISOString().split('T')[0];
                         }
 
+                        const statusChanged = existingEnquiry.servicem8Status !== job.status;
+                        const sourceChanged = existingEnquiry.source !== updatedEnquiry.source;
+                        const changeNotes = [
+                            statusChanged ? `status ${existingEnquiry.servicem8Status} -> ${job.status}` : null,
+                            sourceChanged ? `lead source ${existingEnquiry.source} -> ${updatedEnquiry.source}` : null,
+                        ].filter(Boolean).join(', ');
+
                         updatedEnquiry.history.push({
                             date: new Date().toISOString().split('T')[0],
                             time: new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
                             staff: 'System',
                             action: 'SERVICEM8 SYNC',
-                            notes: `ServiceM8 status changed: ${existingEnquiry.servicem8Status} -> ${job.status}`
+                            notes: `ServiceM8 sync: ${changeNotes || 'badge update'}`
                         });
 
                         const index = enquiries.findIndex(e => e.id === enquiryId);
