@@ -373,6 +373,44 @@ app.put('/api/enquiries', requireDashboardAuth, async (req, res) => {
     }
 });
 
+// Get the shared daily checklists (morning/evening, keyed by date then by
+// whatever name the staff member typed in - no fixed staff list, so it
+// keeps working as people join or leave).
+app.get('/api/checklists', requireDashboardAuth, async (req, res) => {
+    try {
+          const checklists = await kv.get('supersealed_checklists');
+          res.json({ status: 'success', checklists: checklists || {} });
+    } catch (error) {
+          res.status(500).json({
+                  status: 'error',
+                  message: 'Failed to load checklists from the shared store',
+                  error: error.message
+          });
+    }
+});
+
+// Overwrite the shared checklists object. Same whole-object-every-time
+// pattern as /api/enquiries.
+app.put('/api/checklists', requireDashboardAuth, async (req, res) => {
+    try {
+          const { checklists } = req.body;
+          if (!checklists || typeof checklists !== 'object' || Array.isArray(checklists)) {
+                  return res.status(400).json({
+                            status: 'error',
+                            message: 'Request body must include a "checklists" object'
+                  });
+          }
+          await kv.set('supersealed_checklists', checklists);
+          res.json({ status: 'success' });
+    } catch (error) {
+          res.status(500).json({
+                  status: 'error',
+                  message: 'Failed to save checklists to the shared store',
+                  error: error.message
+          });
+    }
+});
+
 // Serve the dashboard page itself
 app.get('/dashboard', requireDashboardAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
