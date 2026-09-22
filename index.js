@@ -36,7 +36,6 @@ app.get('/api/verify', async (req, res) => {
       });
     }
 
-  // Make a simple API call to verify the connection
   const response = await servicem8Client.get('/job.json');
     res.json({
       status: 'verified',
@@ -52,7 +51,7 @@ app.get('/api/verify', async (req, res) => {
   }
 });
 
-// Get all jobs
+// Get all jobs (optional ?filter= for ServiceM8 $filter query syntax)
 app.get('/api/jobs', async (req, res) => {
   try {
     if (!SERVICEM8_API_KEY) {
@@ -116,7 +115,7 @@ app.get('/api/jobs/:jobId', async (req, res) => {
   }
 });
 
-// Get all companies (clients) - used to resolve job contact/billing info
+// Get all companies (optional ?filter=)
 app.get('/api/companies', async (req, res) => {
   try {
     if (!SERVICEM8_API_KEY) {
@@ -180,7 +179,38 @@ app.get('/api/companies/:companyId', async (req, res) => {
   }
 });
 
-// Get job contacts for a specific job (name/phone/email for that job)
+// Get all job contacts (optional ?filter=) - bulk fetch, used to join name/phone/email onto jobs
+app.get('/api/jobcontacts', async (req, res) => {
+  try {
+    if (!SERVICEM8_API_KEY) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'SERVICEM8_API_KEY environment variable is not set'
+      });
+    }
+
+  let endpoint = '/jobcontact.json';
+    if (req.query.filter) {
+      endpoint += `?$filter=${encodeURIComponent(req.query.filter)}`;
+    }
+
+  const response = await servicem8Client.get(endpoint);
+
+  res.json({
+    status: 'success',
+    count: response.data.length,
+    contacts: response.data
+  });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve job contacts from ServiceM8 API',
+      error: error.message
+    });
+  }
+});
+
+// Get job contacts for one specific job
 app.get('/api/jobcontacts/:jobId', async (req, res) => {
   try {
     if (!SERVICEM8_API_KEY) {
