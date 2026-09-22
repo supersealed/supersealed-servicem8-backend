@@ -1027,7 +1027,7 @@
                 <button class="hamburger-btn" onclick="toggleMobileSidebar()">☰</button>
                 <div class="top-bar-title" id="page-title">Dashboard</div>
                 <div class="top-bar-user">
-                    <input type="text" class="user-select" id="admin-select" placeholder="Enter your name" onchange="switchAdmin()" value="Admin">
+                    <input type="text" class="user-select" id="admin-select" placeholder="Enter your name" onchange="switchAdmin()" value="">
                 </div>
             </div>
 
@@ -1526,6 +1526,24 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <div class="card">
+                        <h2>Leads by Source</h2>
+                        <p style="color: var(--gray); margin-bottom: 20px;">Which client came through which source, for the date range above. Click a row to open it.</p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Lead Source</th>
+                                    <th>Customer</th>
+                                    <th>Suburb</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lead-report-clients-body">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1843,7 +1861,10 @@
     <script>
         // APPLICATION STATE
         let enquiries = [];
-        let currentAdmin = 'Elie';
+        // No default name - whoever's using the dashboard types their own name in
+        // the top-right box. Nothing gets silently attributed to a hardcoded person.
+        let currentAdmin = '';
+        let checklists = {}; // shared daily checklists, keyed by date then by name typed in above
         let currentEnquiryId = null;
         let currentPage = 'dashboard';
         let lastSavedEnquiryId = null;
@@ -1894,6 +1915,33 @@
                 }
             } catch (e) {
                 console.error('Failed to load enquiries from shared server:', e);
+            }
+            return false;
+        }
+
+        // Same shared-store pattern as enquiries above: the dashboard always
+        // sends the whole checklists object, and this is the source of truth
+        // once the server is reachable (so any staff member, any device, sees
+        // who's done their checklist today - not just whoever's own browser
+        // happened to save it).
+        function saveChecklistsToServer() {
+            fetch('/api/checklists', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ checklists })
+            }).catch(e => console.error('Failed to save checklists to shared server:', e));
+        }
+
+        async function loadChecklistsFromServer() {
+            try {
+                const res = await fetch('/api/checklists');
+                const data = await res.json();
+                if (data.status === 'success' && data.checklists && typeof data.checklists === 'object') {
+                    checklists = data.checklists;
+                    return true;
+                }
+            } catch (e) {
+                console.error('Failed to load checklists from shared server:', e);
             }
             return false;
         }
@@ -2017,7 +2065,13 @@
         // SWITCH ADMIN
         function switchAdmin() {
             const select = document.getElementById('admin-select');
-            currentAdmin = select.value;
+            currentAdmin = select.value.trim();
+            // Remembered on this device only, so staff don't retype their name every
+            // time they open the dashboard - never shared, never relied on elsewhere.
+            try { localStorage.setItem('supersealed_current_admin', currentAdmin); } catch (e) {}
+            // Re-render whichever page is open so a freshly-typed name immediately
+            // shows the right person's checklist instead of the "enter your name" prompt.
+            if (currentPage === 'daily-report') renderDailyReport();
         }
 
         // UPDATE DASHBOARD
@@ -2617,70 +2671,70 @@
             document.getElementById('checklist-date2').textContent = today;
             document.getElementById('activity-date').textContent = today;
 
-            // Per-admin checklists
-            const admins = ['Elie', 'Chrisia', 'Dinah'];
+            if (!checklists[today]) checklists[today] = {};
 
-            // START CHECKLISTS
             const startChecklistDiv = document.getElementById('admin-checklists-start');
-            startChecklistDiv.innerHTML = '';
-            admins.forEach(admin => {
-                const checklistKey = `start-checklist-${admin}-${today}`;
-                const checklist = JSON.parse(localStorage.getItem(checklistKey) || '{"email":false,"enquiries":false,"followups":false,"completed":""}');
+            const endChecklistDiv = document.getElementById('admin-checklists-end');
 
-                startChecklistDiv.innerHTML += `
+            // No fixed staff list - whoever typed their name in the top-right box
+            // sees (and fills in) their own checklist for today. Nobody can tick
+            // items anonymously, and nothing needs updating in code when staff
+            // change.
+            if (!currentAdmin) {
+                const prompt = '<p style="color: var(--gray);">Enter your name in the box at the top right to start today\'s checklist.</p>';
+                startChecklistDiv.innerHTML = prompt;
+                endChecklistDiv.innerHTML = prompt;
+            } else {
+                const todaysEntry = checklists[today][currentAdmin] || {};
+                const start = todaysEntry.start || { email: false, enquiries: false, followups: false, completed: '' };
+                const end = todaysEntry.end || { overdue: false, priorities: false, handover: false, notes: '', completed: '' };
+
+                startChecklistDiv.innerHTML = `
                     <div style="background-color: var(--light-gray); padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-                        <h4>${admin}</h4>
+                        <h4>${currentAdmin}</h4>
                         <div class="checklist-item">
-                            <input type="checkbox" id="start-email-${admin}" ${checklist.email ? 'checked' : ''} onchange="saveAdminChecklist('start', '${admin}')">
-                            <label for="start-email-${admin}">Email checked for new leads</label>
+                            <input type="checkbox" id="start-email" ${start.email ? 'checked' : ''} onchange="saveAdminChecklist('start')">
+                            <label for="start-email">Email checked for new leads</label>
                         </div>
                         <div class="checklist-item">
-                            <input type="checkbox" id="start-enquiries-${admin}" ${checklist.enquiries ? 'checked' : ''} onchange="saveAdminChecklist('start', '${admin}')">
-                            <label for="start-enquiries-${admin}">Enquiry list reviewed</label>
+                            <input type="checkbox" id="start-enquiries" ${start.enquiries ? 'checked' : ''} onchange="saveAdminChecklist('start')">
+                            <label for="start-enquiries">Enquiry list reviewed</label>
                         </div>
                         <div class="checklist-item">
-                            <input type="checkbox" id="start-followups-${admin}" ${checklist.followups ? 'checked' : ''} onchange="saveAdminChecklist('start', '${admin}')">
-                            <label for="start-followups-${admin}">Follow-up queue reviewed</label>
+                            <input type="checkbox" id="start-followups" ${start.followups ? 'checked' : ''} onchange="saveAdminChecklist('start')">
+                            <label for="start-followups">Follow-up queue reviewed</label>
                         </div>
                         <p style="margin-top: 15px; color: var(--gray); font-size: 12px;">
-                            Completed at: <span id="start-completed-${admin}">${checklist.completed || 'Not completed'}</span>
+                            Completed at: <span id="start-completed">${start.completed || 'Not completed'}</span>
                         </p>
                     </div>
                 `;
-            });
 
-            // END CHECKLISTS
-            const endChecklistDiv = document.getElementById('admin-checklists-end');
-            endChecklistDiv.innerHTML = '';
-            admins.forEach(admin => {
-                const checklistKey = `end-checklist-${admin}-${today}`;
-                const checklist = JSON.parse(localStorage.getItem(checklistKey) || '{"overdue":false,"priorities":false,"handover":false,"notes":"","completed":""}');
-
-                endChecklistDiv.innerHTML += `
+                endChecklistDiv.innerHTML = `
                     <div style="background-color: var(--light-gray); padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-                        <h4>${admin}</h4>
+                        <h4>${currentAdmin}</h4>
                         <div class="checklist-item">
-                            <input type="checkbox" id="end-overdue-${admin}" ${checklist.overdue ? 'checked' : ''} onchange="saveAdminChecklist('end', '${admin}')">
-                            <label for="end-overdue-${admin}">Overdue follow-ups addressed or escalated</label>
+                            <input type="checkbox" id="end-overdue" ${end.overdue ? 'checked' : ''} onchange="saveAdminChecklist('end')">
+                            <label for="end-overdue">Overdue follow-ups addressed or escalated</label>
                         </div>
                         <div class="checklist-item">
-                            <input type="checkbox" id="end-priorities-${admin}" ${checklist.priorities ? 'checked' : ''} onchange="saveAdminChecklist('end', '${admin}')">
-                            <label for="end-priorities-${admin}">Tomorrow's priorities noted</label>
+                            <input type="checkbox" id="end-priorities" ${end.priorities ? 'checked' : ''} onchange="saveAdminChecklist('end')">
+                            <label for="end-priorities">Tomorrow's priorities noted</label>
                         </div>
                         <div class="checklist-item">
-                            <input type="checkbox" id="end-handover-${admin}" ${checklist.handover ? 'checked' : ''} onchange="saveAdminChecklist('end', '${admin}')">
-                            <label for="end-handover-${admin}">Handover notes recorded</label>
+                            <input type="checkbox" id="end-handover" ${end.handover ? 'checked' : ''} onchange="saveAdminChecklist('end')">
+                            <label for="end-handover">Handover notes recorded</label>
                         </div>
                         <div class="form-group" style="margin-top: 15px;">
                             <label>Handover Notes</label>
-                            <textarea id="end-notes-${admin}" onchange="saveAdminChecklist('end', '${admin}')">${checklist.notes}</textarea>
+                            <textarea id="end-notes" onchange="saveAdminChecklist('end')">${end.notes || ''}</textarea>
                         </div>
                         <p style="margin-top: 15px; color: var(--gray); font-size: 12px;">
-                            Completed at: <span id="end-completed-${admin}">${checklist.completed || 'Not completed'}</span>
+                            Completed at: <span id="end-completed">${end.completed || 'Not completed'}</span>
                         </p>
                     </div>
                 `;
-            });
+            }
 
             // Activity Summary
             let enquiriesLogged = 0, callsLogged = 0, emailsLogged = 0, statusChanges = 0;
@@ -2696,14 +2750,26 @@
                 });
             });
 
-            // Staff performance
+            // Staff performance - built from whoever actually showed up today
+            // (has a checklist entry, is assigned a lead created today, or is
+            // logged against today's history) rather than a fixed name list,
+            // so this adapts automatically as staff join or leave.
+            const namesToday = new Set(Object.keys(checklists[today]));
+            enquiries.forEach(e => {
+                if (e.created === today && e.assignedTo) namesToday.add(e.assignedTo);
+                e.history.forEach(h => {
+                    if (h.date === today && h.staff && h.staff !== 'System') namesToday.add(h.staff);
+                });
+            });
+            if (currentAdmin) namesToday.add(currentAdmin);
+
             const staffStats = {};
-            admins.forEach(staff => {
+            namesToday.forEach(staff => {
                 staffStats[staff] = { enquiries: 0, calls: 0, emails: 0, statusChanges: 0 };
             });
 
             enquiries.forEach(e => {
-                if (e.created === today && e.assignedTo) {
+                if (e.created === today && e.assignedTo && staffStats[e.assignedTo]) {
                     staffStats[e.assignedTo].enquiries++;
                 }
                 e.history.forEach(h => {
@@ -2717,7 +2783,7 @@
 
             const perfTable = document.getElementById('staff-performance');
             perfTable.innerHTML = '';
-            Object.entries(staffStats).forEach(([staff, stats]) => {
+            Object.entries(staffStats).sort(([a], [b]) => a.localeCompare(b)).forEach(([staff, stats]) => {
                 const row = perfTable.insertRow();
                 row.innerHTML = `
                     <td>${staff}</td>
@@ -2727,19 +2793,29 @@
                     <td>${stats.statusChanges}</td>
                 `;
             });
+            if (namesToday.size === 0) {
+                const row = perfTable.insertRow();
+                row.innerHTML = '<td colspan="5" style="color: var(--gray);">No activity logged yet today.</td>';
+            }
         }
 
-        // SAVE ADMIN CHECKLIST
-        function saveAdminChecklist(type, admin) {
+        // SAVE ADMIN CHECKLIST - saves against whoever's currently typed into the
+        // name box, into the shared checklists store (visible to everyone, not
+        // just this browser).
+        function saveAdminChecklist(type) {
+            if (!currentAdmin) return;
+
             const today = new Date().toISOString().split('T')[0];
             const currentTime = new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
 
+            if (!checklists[today]) checklists[today] = {};
+            if (!checklists[today][currentAdmin]) checklists[today][currentAdmin] = {};
+
             if (type === 'start') {
-                const checklistKey = `start-checklist-${admin}-${today}`;
                 const checklist = {
-                    email: document.getElementById(`start-email-${admin}`).checked,
-                    enquiries: document.getElementById(`start-enquiries-${admin}`).checked,
-                    followups: document.getElementById(`start-followups-${admin}`).checked,
+                    email: document.getElementById('start-email').checked,
+                    enquiries: document.getElementById('start-enquiries').checked,
+                    followups: document.getElementById('start-followups').checked,
                     completed: ''
                 };
 
@@ -2747,17 +2823,16 @@
                     checklist.completed = currentTime;
                 }
 
-                localStorage.setItem(checklistKey, JSON.stringify(checklist));
+                checklists[today][currentAdmin].start = checklist;
                 if (checklist.completed) {
-                    document.getElementById(`start-completed-${admin}`).textContent = checklist.completed;
+                    document.getElementById('start-completed').textContent = checklist.completed;
                 }
             } else if (type === 'end') {
-                const checklistKey = `end-checklist-${admin}-${today}`;
                 const checklist = {
-                    overdue: document.getElementById(`end-overdue-${admin}`).checked,
-                    priorities: document.getElementById(`end-priorities-${admin}`).checked,
-                    handover: document.getElementById(`end-handover-${admin}`).checked,
-                    notes: document.getElementById(`end-notes-${admin}`).value,
+                    overdue: document.getElementById('end-overdue').checked,
+                    priorities: document.getElementById('end-priorities').checked,
+                    handover: document.getElementById('end-handover').checked,
+                    notes: document.getElementById('end-notes').value,
                     completed: ''
                 };
 
@@ -2765,11 +2840,13 @@
                     checklist.completed = currentTime;
                 }
 
-                localStorage.setItem(checklistKey, JSON.stringify(checklist));
+                checklists[today][currentAdmin].end = checklist;
                 if (checklist.completed) {
-                    document.getElementById(`end-completed-${admin}`).textContent = checklist.completed;
+                    document.getElementById('end-completed').textContent = checklist.completed;
                 }
             }
+
+            saveChecklistsToServer();
         }
 
         // SWITCH TAB
@@ -2792,6 +2869,16 @@
             const tbody = document.getElementById('lead-report-body');
             tbody.innerHTML = '';
 
+            // The date pickers above the report now actually scope it (they
+            // didn't before - this table showed all-time totals regardless of
+            // what was selected). Blank on either side just leaves that side
+            // unbounded rather than excluding everything.
+            const startDate = document.getElementById('report-start-date').value;
+            const endDate = document.getElementById('report-end-date').value;
+            const filtered = enquiries.filter(e =>
+                (!startDate || e.created >= startDate) && (!endDate || e.created <= endDate)
+            );
+
             const sources = ['Google', 'Meta', 'Website', 'Phone', 'Referral', 'Returning', 'Other'];
             const stats = {};
 
@@ -2806,16 +2893,19 @@
                 };
             });
 
-            enquiries.forEach(e => {
+            filtered.forEach(e => {
+                // Any source not in the known list (e.g. a stray value) still
+                // gets counted, under its own name, rather than silently dropped.
                 const source = e.source || 'Other';
-                if (stats[source]) {
-                    stats[source].total++;
-                    if (e.status !== 'NEW – NOT CONTACTED') stats[source].contacted++;
-                    if (e.status === 'QUALIFIED' || ['WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED', 'JOB BOOKED'].includes(e.status)) stats[source].qualified++;
-                    if (['QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED', 'JOB BOOKED'].includes(e.status)) stats[source].quotesBooked++;
-                    if (['QUOTE COMPLETED', 'JOB BOOKED'].includes(e.status)) stats[source].quotesCompleted++;
-                    if (e.status === 'JOB BOOKED') stats[source].jobsBooked++;
+                if (!stats[source]) {
+                    stats[source] = { total: 0, contacted: 0, qualified: 0, quotesBooked: 0, quotesCompleted: 0, jobsBooked: 0 };
                 }
+                stats[source].total++;
+                if (e.status !== 'NEW – NOT CONTACTED') stats[source].contacted++;
+                if (e.status === 'QUALIFIED' || ['WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED', 'JOB BOOKED'].includes(e.status)) stats[source].qualified++;
+                if (['QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED', 'JOB BOOKED'].includes(e.status)) stats[source].quotesBooked++;
+                if (['QUOTE COMPLETED', 'JOB BOOKED'].includes(e.status)) stats[source].quotesCompleted++;
+                if (e.status === 'JOB BOOKED') stats[source].jobsBooked++;
             });
 
             Object.entries(stats).forEach(([source, s]) => {
@@ -2839,6 +2929,41 @@
                     `;
                 }
             });
+
+            renderLeadReportClients(filtered);
+        }
+
+        // Per-client detail underneath the summary above: which named customer
+        // came through which source, for the same date range, so a source
+        // total can be traced back to the actual leads behind it.
+        function renderLeadReportClients(filtered) {
+            const tbody = document.getElementById('lead-report-clients-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const sorted = [...filtered].sort((a, b) => {
+                const sourceCompare = (a.source || 'Other').localeCompare(b.source || 'Other');
+                if (sourceCompare !== 0) return sourceCompare;
+                return (b.created || '').localeCompare(a.created || '');
+            });
+
+            sorted.forEach(e => {
+                const row = tbody.insertRow();
+                row.onclick = () => viewEnquiry(e.id);
+                row.style.cursor = 'pointer';
+                row.innerHTML = `
+                    <td>${e.source || 'Other'}</td>
+                    <td>${e.name}</td>
+                    <td>${e.suburb || '-'}</td>
+                    <td><span class="status-badge ${getStatusClass(e.status)}">${e.status.substring(0, 15)}</span></td>
+                    <td>${e.created}</td>
+                `;
+            });
+
+            if (sorted.length === 0) {
+                const row = tbody.insertRow();
+                row.innerHTML = '<td colspan="5" style="color: var(--gray);">No leads in this date range.</td>';
+            }
         }
 
         // UPDATE LEAD REPORT WITH DATES
@@ -3268,6 +3393,17 @@
 
         // INITIALIZE
         document.addEventListener('DOMContentLoaded', async () => {
+            // Remember the name this device last used (per-browser convenience
+            // only - never relied on for anything shared) so staff don't have
+            // to retype it every time they open the dashboard.
+            try {
+                const savedName = localStorage.getItem('supersealed_current_admin');
+                if (savedName) {
+                    currentAdmin = savedName;
+                    document.getElementById('admin-select').value = savedName;
+                }
+            } catch (e) {}
+
             // Show something instantly from the local cache (or fake data on
             // a brand new browser), then swap in the shared server copy the
             // moment it arrives so everyone converges on the same data.
@@ -3282,6 +3418,9 @@
                 updateDashboard();
                 if (typeof renderEnquiryList === 'function') { try { renderEnquiryList(); } catch (e) {} }
             }
+
+            await loadChecklistsFromServer();
+            if (currentPage === 'daily-report') renderDailyReport();
 
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('report-start-date').value = today;
