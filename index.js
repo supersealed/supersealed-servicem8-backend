@@ -15,11 +15,8 @@ const SERVICEM8_BASE_URL = 'https://api.servicem8.com/api_1.0';
 // Create axios instance for ServiceM8 API
 const servicem8Client = axios.create({
   baseURL: SERVICEM8_BASE_URL,
-  auth: {
-    username: SERVICEM8_API_KEY,
-    password: ''
-  },
   headers: {
+    'X-API-Key': SERVICEM8_API_KEY,
     'Content-Type': 'application/json'
   }
 });
@@ -39,8 +36,8 @@ app.get('/api/verify', async (req, res) => {
       });
     }
 
-    // Make a simple API call to verify the connection
-    const response = await servicem8Client.get('/job.json');
+  // Make a simple API call to verify the connection
+  const response = await servicem8Client.get('/job.json');
     res.json({
       status: 'verified',
       message: 'Successfully connected to ServiceM8 API',
@@ -65,13 +62,13 @@ app.get('/api/jobs', async (req, res) => {
       });
     }
 
-    const response = await servicem8Client.get('/job.json');
+  const response = await servicem8Client.get('/job.json');
 
-    res.json({
-      status: 'success',
-      count: response.data.length,
-      jobs: response.data
-    });
+  res.json({
+    status: 'success',
+    count: response.data.length,
+    jobs: response.data
+  });
   } catch (error) {
     res.status(500).json({
       status: 'error',
@@ -91,13 +88,13 @@ app.get('/api/jobs/:jobId', async (req, res) => {
       });
     }
 
-    const { jobId } = req.params;
+  const { jobId } = req.params;
     const response = await servicem8Client.get(`/job/${jobId}.json`);
 
-    res.json({
-      status: 'success',
-      job: response.data
-    });
+  res.json({
+    status: 'success',
+    job: response.data
+  });
   } catch (error) {
     if (error.response?.status === 404) {
       return res.status(404).json({
@@ -106,11 +103,11 @@ app.get('/api/jobs/:jobId', async (req, res) => {
       });
     }
 
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to retrieve job from ServiceM8 API',
-      error: error.message
-    });
+  res.status(500).json({
+    status: 'error',
+    message: 'Failed to retrieve job from ServiceM8 API',
+    error: error.message
+  });
   }
 });
 
@@ -124,16 +121,16 @@ app.put('/api/jobs/:jobId', async (req, res) => {
       });
     }
 
-    const { jobId } = req.params;
+  const { jobId } = req.params;
     const jobData = req.body;
 
-    const response = await servicem8Client.put(`/job/${jobId}.json`, jobData);
+  const response = await servicem8Client.put(`/job/${jobId}.json`, jobData);
 
-    res.json({
-      status: 'success',
-      message: 'Job updated successfully',
-      job: response.data
-    });
+  res.json({
+    status: 'success',
+    message: 'Job updated successfully',
+    job: response.data
+  });
   } catch (error) {
     if (error.response?.status === 404) {
       return res.status(404).json({
@@ -142,11 +139,11 @@ app.put('/api/jobs/:jobId', async (req, res) => {
       });
     }
 
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to update job in ServiceM8 API',
-      error: error.message
-    });
+  res.status(500).json({
+    status: 'error',
+    message: 'Failed to update job in ServiceM8 API',
+    error: error.message
+  });
   }
 });
 
