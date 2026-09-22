@@ -1454,6 +1454,8 @@
                     <div class="card">
                         <h2>Daily Admin Report</h2>
 
+                        <div id="daily-report-identity" style="margin-bottom: 20px;"></div>
+
                         <div class="tabs">
                             <div class="tab active" onclick="switchTab('start-checklist')">Morning Checklist</div>
                             <div class="tab" onclick="switchTab('end-checklist')">Evening Checklist</div>
@@ -1485,6 +1487,8 @@
                                             <th>Calls</th>
                                             <th>Emails</th>
                                             <th>Status Changes</th>
+                                            <th>AM Checklist</th>
+                                            <th>PM Checklist</th>
                                         </tr>
                                     </thead>
                                     <tbody id="staff-performance">
@@ -2072,6 +2076,33 @@
             // Re-render whichever page is open so a freshly-typed name immediately
             // shows the right person's checklist instead of the "enter your name" prompt.
             if (currentPage === 'daily-report') renderDailyReport();
+        }
+
+        // START DAILY REPORT SESSION - explicit "click here" step for the Daily
+        // Admin Report page, so typing a name always requires a deliberate click
+        // (not a blur/Enter-only change event) before the checklist appears.
+        function startDailyReportSession() {
+            const input = document.getElementById('daily-report-name-input');
+            const name = (input && input.value ? input.value : '').trim();
+            if (!name) {
+                alert('Please enter your name first.');
+                return;
+            }
+            currentAdmin = name;
+            try { localStorage.setItem('supersealed_current_admin', currentAdmin); } catch (e) {}
+            const topBarInput = document.getElementById('admin-select');
+            if (topBarInput) topBarInput.value = currentAdmin;
+            renderDailyReport();
+        }
+
+        // SWITCH DAILY REPORT USER - lets someone hand the device to a
+        // colleague without digging into the top bar.
+        function switchDailyReportUser() {
+            currentAdmin = '';
+            try { localStorage.removeItem('supersealed_current_admin'); } catch (e) {}
+            const topBarInput = document.getElementById('admin-select');
+            if (topBarInput) topBarInput.value = '';
+            renderDailyReport();
         }
 
         // UPDATE DASHBOARD
@@ -2673,18 +2704,33 @@
 
             if (!checklists[today]) checklists[today] = {};
 
+            const identityDiv = document.getElementById('daily-report-identity');
             const startChecklistDiv = document.getElementById('admin-checklists-start');
             const endChecklistDiv = document.getElementById('admin-checklists-end');
 
-            // No fixed staff list - whoever typed their name in the top-right box
-            // sees (and fills in) their own checklist for today. Nobody can tick
-            // items anonymously, and nothing needs updating in code when staff
-            // change.
+            // No fixed staff list - whoever types their name and clicks "Start
+            // Checklist" sees (and fills in) their own checklist for today.
+            // Nobody can tick items anonymously, and nothing needs updating in
+            // code when staff change.
             if (!currentAdmin) {
-                const prompt = '<p style="color: var(--gray);">Enter your name in the box at the top right to start today\'s checklist.</p>';
+                identityDiv.innerHTML = `
+                    <div style="background-color: var(--light-gray); padding: 15px; border-radius: 4px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <label for="daily-report-name-input" style="font-weight: 600; white-space: nowrap;">Your name:</label>
+                        <input type="text" id="daily-report-name-input" placeholder="e.g. Elie" style="flex: 1; min-width: 150px; padding: 8px; border: 1px solid var(--border); border-radius: 4px;" onkeydown="if(event.key==='Enter'){event.preventDefault(); startDailyReportSession();}">
+                        <button class="btn btn-primary" onclick="startDailyReportSession()">Start Checklist</button>
+                    </div>
+                `;
+                const prompt = '<p style="color: var(--gray);">Enter your name above and click "Start Checklist" to begin.</p>';
                 startChecklistDiv.innerHTML = prompt;
                 endChecklistDiv.innerHTML = prompt;
             } else {
+                identityDiv.innerHTML = `
+                    <div style="background-color: #e8f5e9; padding: 10px 15px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <span>Logged in as <strong>${currentAdmin}</strong></span>
+                        <button class="btn btn-small" onclick="switchDailyReportUser()">Not you? Switch</button>
+                    </div>
+                `;
+
                 const todaysEntry = checklists[today][currentAdmin] || {};
                 const start = todaysEntry.start || { email: false, enquiries: false, followups: false, completed: '' };
                 const end = todaysEntry.end || { overdue: false, priorities: false, handover: false, notes: '', completed: '' };
@@ -2693,20 +2739,23 @@
                     <div style="background-color: var(--light-gray); padding: 15px; border-radius: 4px; margin-bottom: 20px;">
                         <h4>${currentAdmin}</h4>
                         <div class="checklist-item">
-                            <input type="checkbox" id="start-email" ${start.email ? 'checked' : ''} onchange="saveAdminChecklist('start')">
+                            <input type="checkbox" id="start-email" ${start.email ? 'checked' : ''} ${start.completed ? 'disabled' : ''} onchange="saveAdminChecklist('start')">
                             <label for="start-email">Email checked for new leads</label>
                         </div>
                         <div class="checklist-item">
-                            <input type="checkbox" id="start-enquiries" ${start.enquiries ? 'checked' : ''} onchange="saveAdminChecklist('start')">
+                            <input type="checkbox" id="start-enquiries" ${start.enquiries ? 'checked' : ''} ${start.completed ? 'disabled' : ''} onchange="saveAdminChecklist('start')">
                             <label for="start-enquiries">Enquiry list reviewed</label>
                         </div>
                         <div class="checklist-item">
-                            <input type="checkbox" id="start-followups" ${start.followups ? 'checked' : ''} onchange="saveAdminChecklist('start')">
+                            <input type="checkbox" id="start-followups" ${start.followups ? 'checked' : ''} ${start.completed ? 'disabled' : ''} onchange="saveAdminChecklist('start')">
                             <label for="start-followups">Follow-up queue reviewed</label>
                         </div>
-                        <p style="margin-top: 15px; color: var(--gray); font-size: 12px;">
-                            Completed at: <span id="start-completed">${start.completed || 'Not completed'}</span>
-                        </p>
+                        <div style="margin-top: 15px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            ${start.completed
+                                ? `<span style="color: #2e7d32; font-weight: 600;">✅ Completed at ${start.completed}</span><button class="btn btn-small" onclick="reopenAdminChecklist('start')">Edit</button>`
+                                : `<button class="btn btn-primary" onclick="completeAdminChecklist('start')">✅ Mark Morning Checklist Complete</button>`
+                            }
+                        </div>
                     </div>
                 `;
 
@@ -2714,24 +2763,27 @@
                     <div style="background-color: var(--light-gray); padding: 15px; border-radius: 4px; margin-bottom: 20px;">
                         <h4>${currentAdmin}</h4>
                         <div class="checklist-item">
-                            <input type="checkbox" id="end-overdue" ${end.overdue ? 'checked' : ''} onchange="saveAdminChecklist('end')">
+                            <input type="checkbox" id="end-overdue" ${end.overdue ? 'checked' : ''} ${end.completed ? 'disabled' : ''} onchange="saveAdminChecklist('end')">
                             <label for="end-overdue">Overdue follow-ups addressed or escalated</label>
                         </div>
                         <div class="checklist-item">
-                            <input type="checkbox" id="end-priorities" ${end.priorities ? 'checked' : ''} onchange="saveAdminChecklist('end')">
+                            <input type="checkbox" id="end-priorities" ${end.priorities ? 'checked' : ''} ${end.completed ? 'disabled' : ''} onchange="saveAdminChecklist('end')">
                             <label for="end-priorities">Tomorrow's priorities noted</label>
                         </div>
                         <div class="checklist-item">
-                            <input type="checkbox" id="end-handover" ${end.handover ? 'checked' : ''} onchange="saveAdminChecklist('end')">
+                            <input type="checkbox" id="end-handover" ${end.handover ? 'checked' : ''} ${end.completed ? 'disabled' : ''} onchange="saveAdminChecklist('end')">
                             <label for="end-handover">Handover notes recorded</label>
                         </div>
                         <div class="form-group" style="margin-top: 15px;">
                             <label>Handover Notes</label>
-                            <textarea id="end-notes" onchange="saveAdminChecklist('end')">${end.notes || ''}</textarea>
+                            <textarea id="end-notes" ${end.completed ? 'disabled' : ''} onchange="saveAdminChecklist('end')">${end.notes || ''}</textarea>
                         </div>
-                        <p style="margin-top: 15px; color: var(--gray); font-size: 12px;">
-                            Completed at: <span id="end-completed">${end.completed || 'Not completed'}</span>
-                        </p>
+                        <div style="margin-top: 15px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            ${end.completed
+                                ? `<span style="color: #2e7d32; font-weight: 600;">✅ Completed at ${end.completed}</span><button class="btn btn-small" onclick="reopenAdminChecklist('end')">Edit</button>`
+                                : `<button class="btn btn-primary" onclick="completeAdminChecklist('end')">✅ Mark Evening Checklist Complete</button>`
+                            }
+                        </div>
                     </div>
                 `;
             }
@@ -2765,7 +2817,12 @@
 
             const staffStats = {};
             namesToday.forEach(staff => {
-                staffStats[staff] = { enquiries: 0, calls: 0, emails: 0, statusChanges: 0 };
+                const entry = checklists[today][staff] || {};
+                staffStats[staff] = {
+                    enquiries: 0, calls: 0, emails: 0, statusChanges: 0,
+                    amCompleted: (entry.start && entry.start.completed) || '',
+                    pmCompleted: (entry.end && entry.end.completed) || ''
+                };
             });
 
             enquiries.forEach(e => {
@@ -2791,18 +2848,56 @@
                     <td>${stats.calls}</td>
                     <td>${stats.emails}</td>
                     <td>${stats.statusChanges}</td>
+                    <td>${stats.amCompleted ? '✅ ' + stats.amCompleted : '—'}</td>
+                    <td>${stats.pmCompleted ? '✅ ' + stats.pmCompleted : '—'}</td>
                 `;
             });
             if (namesToday.size === 0) {
                 const row = perfTable.insertRow();
-                row.innerHTML = '<td colspan="5" style="color: var(--gray);">No activity logged yet today.</td>';
+                row.innerHTML = '<td colspan="7" style="color: var(--gray);">No activity logged yet today.</td>';
             }
         }
 
-        // SAVE ADMIN CHECKLIST - saves against whoever's currently typed into the
-        // name box, into the shared checklists store (visible to everyone, not
-        // just this browser).
+        // SAVE ADMIN CHECKLIST - saves tick/note changes against whoever's
+        // currently logged in, into the shared checklists store (visible to
+        // everyone, not just this browser). Ticking boxes no longer marks the
+        // checklist complete on its own - that only happens when the admin
+        // clicks the explicit "Mark Complete" button (completeAdminChecklist).
         function saveAdminChecklist(type) {
+            if (!currentAdmin) return;
+
+            const today = new Date().toISOString().split('T')[0];
+
+            if (!checklists[today]) checklists[today] = {};
+            if (!checklists[today][currentAdmin]) checklists[today][currentAdmin] = {};
+
+            if (type === 'start') {
+                const existing = checklists[today][currentAdmin].start || {};
+                checklists[today][currentAdmin].start = {
+                    email: document.getElementById('start-email').checked,
+                    enquiries: document.getElementById('start-enquiries').checked,
+                    followups: document.getElementById('start-followups').checked,
+                    completed: existing.completed || ''
+                };
+            } else if (type === 'end') {
+                const existing = checklists[today][currentAdmin].end || {};
+                checklists[today][currentAdmin].end = {
+                    overdue: document.getElementById('end-overdue').checked,
+                    priorities: document.getElementById('end-priorities').checked,
+                    handover: document.getElementById('end-handover').checked,
+                    notes: document.getElementById('end-notes').value,
+                    completed: existing.completed || ''
+                };
+            }
+
+            saveChecklistsToServer();
+        }
+
+        // COMPLETE ADMIN CHECKLIST - the explicit "click here to finish" step.
+        // Requires every item to be ticked first, then stamps a completed time
+        // and locks the checklist, so it shows as done in the Activity Summary
+        // (the "report system") straight away.
+        function completeAdminChecklist(type) {
             if (!currentAdmin) return;
 
             const today = new Date().toISOString().split('T')[0];
@@ -2812,41 +2907,38 @@
             if (!checklists[today][currentAdmin]) checklists[today][currentAdmin] = {};
 
             if (type === 'start') {
-                const checklist = {
-                    email: document.getElementById('start-email').checked,
-                    enquiries: document.getElementById('start-enquiries').checked,
-                    followups: document.getElementById('start-followups').checked,
-                    completed: ''
-                };
-
-                if (checklist.email && checklist.enquiries && checklist.followups) {
-                    checklist.completed = currentTime;
+                const c = checklists[today][currentAdmin].start || { email: false, enquiries: false, followups: false, completed: '' };
+                if (!(c.email && c.enquiries && c.followups)) {
+                    alert('Please tick all three items before marking the morning checklist complete.');
+                    return;
                 }
-
-                checklists[today][currentAdmin].start = checklist;
-                if (checklist.completed) {
-                    document.getElementById('start-completed').textContent = checklist.completed;
-                }
+                c.completed = currentTime;
+                checklists[today][currentAdmin].start = c;
             } else if (type === 'end') {
-                const checklist = {
-                    overdue: document.getElementById('end-overdue').checked,
-                    priorities: document.getElementById('end-priorities').checked,
-                    handover: document.getElementById('end-handover').checked,
-                    notes: document.getElementById('end-notes').value,
-                    completed: ''
-                };
-
-                if (checklist.overdue && checklist.priorities && checklist.handover) {
-                    checklist.completed = currentTime;
+                const c = checklists[today][currentAdmin].end || { overdue: false, priorities: false, handover: false, notes: '', completed: '' };
+                if (!(c.overdue && c.priorities && c.handover)) {
+                    alert('Please tick all three items before marking the evening checklist complete.');
+                    return;
                 }
-
-                checklists[today][currentAdmin].end = checklist;
-                if (checklist.completed) {
-                    document.getElementById('end-completed').textContent = checklist.completed;
-                }
+                c.completed = currentTime;
+                checklists[today][currentAdmin].end = c;
             }
 
             saveChecklistsToServer();
+            renderDailyReport();
+        }
+
+        // REOPEN ADMIN CHECKLIST - clears the completed stamp so a mistake can
+        // be fixed, then the admin has to click "Mark Complete" again.
+        function reopenAdminChecklist(type) {
+            if (!currentAdmin) return;
+
+            const today = new Date().toISOString().split('T')[0];
+            if (checklists[today] && checklists[today][currentAdmin] && checklists[today][currentAdmin][type]) {
+                checklists[today][currentAdmin][type].completed = '';
+                saveChecklistsToServer();
+                renderDailyReport();
+            }
         }
 
         // SWITCH TAB
