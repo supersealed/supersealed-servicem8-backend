@@ -1,0 +1,3227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperSealed Admin Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --teal: #00D4AF;
+            --dark: #1a1a1a;
+            --light-dark: #333;
+            --white: #ffffff;
+            --red: #d32f2f;
+            --orange: #f57c00;
+            --yellow: #fbc02d;
+            --green: #388e3c;
+            --gray: #9e9e9e;
+            --light-gray: #f5f5f5;
+            --border-gray: #e0e0e0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--white);
+            color: var(--dark);
+            line-height: 1.5;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: 220px;
+            background-color: var(--dark);
+            color: var(--white);
+            padding: 20px 0;
+            overflow-y: auto;
+            border-right: 3px solid var(--teal);
+        }
+
+        .sidebar-header {
+            padding: 0 20px 30px;
+            border-bottom: 1px solid var(--light-dark);
+            margin-bottom: 20px;
+        }
+
+        .sidebar-logo {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--teal);
+        }
+
+        .sidebar-subtitle {
+            font-size: 12px;
+            color: var(--gray);
+            margin-top: 5px;
+        }
+
+        .nav-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+
+        .nav-item:hover {
+            background-color: var(--light-dark);
+            border-left-color: var(--teal);
+        }
+
+        .nav-item.active {
+            background-color: var(--light-dark);
+            border-left-color: var(--teal);
+            color: var(--teal);
+            font-weight: 600;
+        }
+
+        /* MAIN CONTENT */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .top-bar {
+            background-color: var(--white);
+            border-bottom: 1px solid var(--border-gray);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .top-bar-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .top-bar-user {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-select {
+            padding: 8px 12px;
+            border: 1px solid var(--border-gray);
+            border-radius: 4px;
+            background-color: var(--white);
+            font-size: 12px;
+        }
+
+        /* CONTENT AREA */
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
+            background-color: var(--light-gray);
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        /* BUTTONS */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background-color: var(--teal);
+            color: var(--dark);
+        }
+
+        .btn-primary:hover {
+            background-color: #00b89c;
+        }
+
+        .btn-secondary {
+            background-color: var(--light-dark);
+            color: var(--white);
+            border: 1px solid var(--border-gray);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--dark);
+        }
+
+        .btn-small {
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+
+        .btn-danger {
+            background-color: var(--red);
+            color: var(--white);
+        }
+
+        .btn-danger:hover {
+            background-color: #b71c1c;
+        }
+
+        /* CARDS */
+        .card {
+            background-color: var(--white);
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-gray);
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background-color: var(--white);
+            border-radius: 4px;
+            padding: 20px;
+            border-left: 4px solid var(--teal);
+            text-align: center;
+        }
+
+        .metric-card.alert {
+            border-left-color: var(--red);
+        }
+
+        .metric-card.warning {
+            border-left-color: var(--orange);
+        }
+
+        .metric-card.success {
+            border-left-color: var(--green);
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--dark);
+            margin: 10px 0;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* FORMS */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: var(--dark);
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        input[type="date"],
+        input[type="time"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-gray);
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            background-color: var(--white);
+            color: var(--dark);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: var(--gray);
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--teal);
+            box-shadow: 0 0 0 3px rgba(0, 212, 175, 0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .required::after {
+            content: " *";
+            color: var(--red);
+        }
+
+        /* TABLES */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: var(--white);
+            margin-top: 10px;
+        }
+
+        th {
+            background-color: var(--light-gray);
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--dark);
+            border-bottom: 2px solid var(--border-gray);
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-gray);
+            font-size: 13px;
+        }
+
+        tr:hover {
+            background-color: #fafafa;
+            cursor: pointer;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-new { background-color: #e3f2fd; color: #1976d2; }
+        .status-contacted { background-color: #fff3e0; color: #e65100; }
+        .status-qualified { background-color: #e8f5e9; color: #2e7d32; }
+        .status-waiting-photos { background-color: #fef9c3; color: #f57f17; }
+        .status-waiting-info { background-color: #fef9c3; color: #f57f17; }
+        .status-followup { background-color: #fef9c3; color: #f57f17; }
+        .status-quote-booked { background-color: #e8f5e9; color: #2e7d32; }
+        .status-quote-completed { background-color: #e8f5e9; color: #2e7d32; }
+        .status-job-booked { background-color: #e8f5e9; color: #2e7d32; }
+        .status-could-not-contact { background-color: #f5f5f5; color: #666; }
+        .status-not-proceeding { background-color: #f5f5f5; color: #666; }
+        .status-not-suitable { background-color: #f5f5f5; color: #666; }
+        .status-outside-area { background-color: #f5f5f5; color: #666; }
+        .status-escalate { background-color: #ffebee; color: #c62828; }
+
+        .overdue {
+            color: var(--red);
+            font-weight: 600;
+        }
+
+        /* MODALS */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: var(--white);
+            border-radius: 4px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-gray);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--gray);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-gray);
+        }
+
+        /* TABS */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-gray);
+            margin-bottom: 20px;
+            gap: 20px;
+        }
+
+        .tab {
+            padding: 12px 0;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--gray);
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: var(--dark);
+        }
+
+        .tab.active {
+            color: var(--teal);
+            border-bottom-color: var(--teal);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* FILTERS */
+        .filter-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            max-width: 200px;
+        }
+
+        /* HISTORY LOG */
+        .history-entry {
+            padding: 15px;
+            border-left: 3px solid var(--teal);
+            background-color: var(--light-gray);
+            margin-bottom: 10px;
+            border-radius: 2px;
+        }
+
+        .history-entry-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: var(--gray);
+        }
+
+        .history-entry-action {
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+
+        .history-entry-text {
+            font-size: 13px;
+            color: var(--dark);
+            line-height: 1.4;
+        }
+
+        /* CHECKLIST */
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background-color: var(--light-gray);
+            margin-bottom: 10px;
+            border-radius: 4px;
+            gap: 12px;
+        }
+
+        .checklist-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .checklist-item label {
+            margin: 0;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .detail-section {
+            background-color: var(--light-gray);
+            padding: 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--teal);
+        }
+
+        .detail-section h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .detail-item {
+            background-color: var(--white);
+            padding: 10px;
+            border-radius: 3px;
+        }
+
+        .detail-item-label {
+            font-size: 11px;
+            color: var(--gray);
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .detail-item-value {
+            font-size: 15px;
+            color: var(--dark);
+            font-weight: 500;
+        }
+
+        .detail-item-value.empty {
+            color: var(--gray);
+            font-style: italic;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .alert-box {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background-color: #e8f5e9;
+            border-left: 4px solid var(--green);
+            color: #2e7d32;
+        }
+
+        .stat-box {
+            background-color: var(--white);
+            padding: 20px;
+            border-radius: 4px;
+            border: 1px solid var(--border-gray);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--gray);
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--dark);
+        }
+
+        .inline-edit-btn {
+            background: none;
+            border: none;
+            color: var(--teal);
+            cursor: pointer;
+            text-decoration: underline;
+            font-size: 12px;
+            padding: 0;
+            margin-top: 5px;
+        }
+
+        .inline-edit-btn:hover {
+            color: #00b89c;
+        }
+
+        .confirmation-modal {
+            text-align: center;
+        }
+
+        .confirmation-modal h2 {
+            color: var(--green);
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        .confirmation-modal p {
+            color: var(--gray);
+            margin-bottom: 30px;
+        }
+
+        .confirmation-modal-id {
+            background-color: var(--light-gray);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--dark);
+        }
+
+        .confirmation-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .edit-section {
+            display: none;
+        }
+
+        .edit-section.active {
+            display: block;
+        }
+
+        /* HAMBURGER MENU */
+        .hamburger-btn {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--dark);
+            padding: 8px;
+        }
+
+        /* MOBILE RESPONSIVE */
+        @media (max-width: 768px) {
+            .hamburger-btn {
+                display: block;
+            }
+            .container {
+                flex-direction: column;
+                height: auto;
+                min-height: 100vh;
+            }
+
+            .sidebar {
+                width: 100%;
+                padding: 15px 0;
+                border-right: none;
+                border-bottom: 3px solid var(--teal);
+                max-height: 60px;
+                overflow: hidden;
+                transition: max-height 0.3s ease;
+            }
+
+            .sidebar.open {
+                max-height: 100vh;
+                overflow-y: auto;
+            }
+
+            .sidebar-header {
+                padding: 0 15px 15px;
+                margin-bottom: 10px;
+            }
+
+            .sidebar-logo {
+                font-size: 16px;
+            }
+
+            .nav-item {
+                padding: 12px 15px;
+                font-size: 13px;
+            }
+
+            .main-content {
+                flex: 1;
+            }
+
+            .top-bar {
+                padding: 12px 15px;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .top-bar-title {
+                font-size: 16px;
+                width: 100%;
+            }
+
+            .top-bar-user {
+                gap: 10px;
+            }
+
+            .user-select {
+                padding: 6px 10px;
+                font-size: 11px;
+                width: 100%;
+            }
+
+            .content {
+                padding: 15px;
+                overflow-y: auto;
+            }
+
+            .card {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+
+            .card h2 {
+                font-size: 16px;
+            }
+
+            .card-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .metric-card {
+                padding: 15px;
+            }
+
+            .metric-value {
+                font-size: 24px;
+            }
+
+            .metric-label {
+                font-size: 11px;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .form-group {
+                margin-bottom: 15px;
+            }
+
+            label {
+                font-size: 13px;
+                margin-bottom: 4px;
+            }
+
+            input[type="text"],
+            input[type="email"],
+            input[type="tel"],
+            input[type="date"],
+            input[type="time"],
+            textarea,
+            select {
+                font-size: 16px;
+                padding: 12px;
+            }
+
+            textarea {
+                min-height: 100px;
+            }
+
+            .btn {
+                padding: 12px 16px;
+                font-size: 13px;
+                width: 100%;
+                justify-content: center;
+            }
+
+            .btn-small {
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+
+            /* TABLE RESPONSIVENESS */
+            table {
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 8px;
+                font-size: 12px;
+            }
+
+            /* Hide less important columns on mobile */
+            table th:nth-child(3),
+            table td:nth-child(3),
+            table th:nth-child(4),
+            table td:nth-child(4),
+            table th:nth-child(6),
+            table td:nth-child(6) {
+                display: none;
+            }
+
+            .status-badge {
+                font-size: 10px;
+                padding: 3px 6px;
+            }
+
+            /* MODAL RESPONSIVE */
+            .modal-content {
+                width: 90vw !important;
+                max-width: 95vw !important;
+                margin: 20px auto !important;
+            }
+
+            .modal-header {
+                padding: 12px 15px;
+            }
+
+            .modal-title {
+                font-size: 16px;
+            }
+
+            .modal-footer {
+                flex-direction: column;
+                gap: 8px;
+                justify-content: stretch;
+            }
+
+            .modal-footer button {
+                width: 100%;
+            }
+
+            /* DETAIL PAGE RESPONSIVE */
+            .detail-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .detail-section {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+
+            .detail-section h3 {
+                font-size: 13px;
+            }
+
+            .detail-item {
+                padding: 8px;
+            }
+
+            .detail-item-label {
+                font-size: 10px;
+            }
+
+            .detail-item-value {
+                font-size: 14px;
+            }
+
+            .action-row {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .action-row button {
+                width: 100%;
+            }
+
+            /* FILTER BAR RESPONSIVE */
+            .filter-bar {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .filter-bar input,
+            .filter-bar select {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            /* HISTORY RESPONSIVE */
+            .history-entry {
+                padding: 12px;
+                margin-bottom: 8px;
+            }
+
+            .history-entry-meta {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+
+            /* CHECKLIST RESPONSIVE */
+            .checklist-item {
+                padding: 10px;
+                margin-bottom: 8px;
+            }
+
+            .checklist-item input[type="checkbox"] {
+                width: 18px;
+                height: 18px;
+            }
+
+            /* TABS RESPONSIVE */
+            .tabs {
+                gap: 10px;
+                overflow-x: auto;
+            }
+
+            .tab {
+                font-size: 12px;
+                padding: 10px 0;
+                white-space: nowrap;
+            }
+
+            /* CONFIRMATION MODAL */
+            .confirmation-modal-id {
+                font-size: 14px;
+            }
+
+            .confirmation-buttons {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .confirmation-buttons button {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .top-bar-title {
+                font-size: 14px;
+            }
+
+            .content {
+                padding: 10px;
+            }
+
+            .card {
+                padding: 12px;
+            }
+
+            .metric-value {
+                font-size: 20px;
+            }
+
+            .btn {
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+
+            table {
+                font-size: 11px;
+            }
+
+            th, td {
+                padding: 6px;
+                font-size: 11px;
+            }
+
+            .sidebar-header {
+                padding: 0 10px 10px;
+            }
+
+            .nav-item {
+                padding: 10px;
+                font-size: 12px;
+            }
+
+            .sidebar-logo {
+                font-size: 14px;
+            }
+
+            .sidebar-subtitle {
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">SuperSealed</div>
+                <div class="sidebar-subtitle">Admin Control Board</div>
+            </div>
+
+            <div class="nav-item active" onclick="switchPage('dashboard')">📊 Dashboard</div>
+            <div class="nav-item" onclick="switchPage('add-enquiry')">➕ New Enquiry</div>
+            <div class="nav-item" onclick="switchPage('enquiry-list')">📋 Enquiry List</div>
+            <div class="nav-item" onclick="switchPage('followup-queue')">⏰ Follow-Up Queue</div>
+            <div class="nav-item" onclick="switchPage('escalations')">🚨 Escalations</div>
+            <div class="nav-item" onclick="switchPage('daily-report')">📊 Daily Report</div>
+            <div class="nav-item" onclick="switchPage('lead-report')">📈 Lead Source Report</div>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            <!-- TOP BAR -->
+            <div class="top-bar">
+                <button class="hamburger-btn" onclick="toggleMobileSidebar()">☰</button>
+                <div class="top-bar-title" id="page-title">Dashboard</div>
+                <div class="top-bar-user">
+                    <input type="text" class="user-select" id="admin-select" placeholder="Enter your name" onchange="switchAdmin()" value="Admin">
+                </div>
+            </div>
+
+            <!-- CONTENT AREA -->
+            <div class="content">
+                <!-- DASHBOARD PAGE -->
+                <div class="page active" id="dashboard-page">
+                    <div class="card" style="background-color: #e3f2fd; border-left: 4px solid #1976d2; margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h3 style="margin: 0 0 5px 0; font-size: 14px; color: #1976d2;">🔄 ServiceM8 Integration</h3>
+                                <p style="margin: 0; font-size: 12px; color: #555;">
+                                    Status: <strong id="servicem8-status">Connecting...</strong> | Last sync: <span id="servicem8-last-sync">Never</span>
+                                </p>
+                            </div>
+                            <button class="btn btn-primary btn-small" onclick="manualSyncServiceM8()" style="white-space: nowrap;">🔄 Sync Now</button>
+                        </div>
+                    </div>
+
+                    <div class="card-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">New Enquiries Today</div>
+                            <div class="metric-value" id="metric-new-today">0</div>
+                        </div>
+                        <div class="metric-card alert">
+                            <div class="metric-label">Not Contacted (>1 day)</div>
+                            <div class="metric-value" id="metric-not-contacted">0</div>
+                        </div>
+                        <div class="metric-card success">
+                            <div class="metric-label">Qualified</div>
+                            <div class="metric-value" id="metric-qualified">0</div>
+                        </div>
+                        <div class="metric-card success">
+                            <div class="metric-label">Quotes Booked</div>
+                            <div class="metric-value" id="metric-quotes-booked">0</div>
+                        </div>
+                    </div>
+
+                    <div class="card-grid">
+                        <div class="metric-card warning">
+                            <div class="metric-label">Waiting for Photos</div>
+                            <div class="metric-value" id="metric-waiting-photos">0</div>
+                        </div>
+                        <div class="metric-card warning">
+                            <div class="metric-label">Follow-ups Due Today</div>
+                            <div class="metric-value" id="metric-followup-today">0</div>
+                        </div>
+                        <div class="metric-card alert">
+                            <div class="metric-label">Overdue Follow-ups</div>
+                            <div class="metric-value" id="metric-overdue">0</div>
+                        </div>
+                        <div class="metric-card alert">
+                            <div class="metric-label">Manager Escalations</div>
+                            <div class="metric-value" id="metric-escalations">0</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2>Quick Actions</h2>
+                        <div style="margin-top: 20px;">
+                            <button class="btn btn-primary" onclick="switchPage('add-enquiry')" style="margin-right: 10px;">➕ Log New Enquiry</button>
+                            <button class="btn btn-secondary" onclick="switchPage('followup-queue')">⏰ Review Overdue Follow-ups</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2>Recent Activity (Last 10 Enquiries)</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Customer</th>
+                                    <th>Lead Source</th>
+                                    <th>Status</th>
+                                    <th>Next Action</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashboard-recent">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ADD NEW ENQUIRY PAGE -->
+                <div class="page" id="add-enquiry-page">
+                    <div class="card">
+                        <h2>Log New Enquiry</h2>
+                        <form onsubmit="saveEnquiry(event)">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="required">Customer Name</label>
+                                    <input type="text" id="new-name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="required">Mobile Number</label>
+                                    <input type="tel" id="new-phone" required>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input type="email" id="new-email">
+                                </div>
+                                <div class="form-group">
+                                    <label>Suburb</label>
+                                    <input type="text" id="new-suburb">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Lead Source</label>
+                                    <select id="new-source">
+                                        <option value="">-- Select --</option>
+                                        <option value="Google">Google</option>
+                                        <option value="Meta">Meta / Facebook</option>
+                                        <option value="Website">Website</option>
+                                        <option value="Phone">Phone</option>
+                                        <option value="Referral">Referral</option>
+                                        <option value="Returning">Returning Customer</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Service Required</label>
+                                    <select id="new-service">
+                                        <option value="">-- Select --</option>
+                                        <option value="Shower Leak">Shower Leak / Epoxy Regrouting</option>
+                                        <option value="Bathroom">Bathroom Epoxy Regrouting</option>
+                                        <option value="Balcony">Balcony Epoxy Regrouting / Repair</option>
+                                        <option value="Shower Screen">Shower Screen</option>
+                                        <option value="Shower Base">Shower Base / Repair</option>
+                                        <option value="Multiple">Multiple Showers / Bathrooms</option>
+                                        <option value="Caulking">Caulking Only (Review)</option>
+                                        <option value="Shower Floor">Shower Floor Only (Review)</option>
+                                        <option value="Unusual">Unusual / Unknown Work (Review)</option>
+                                        <option value="Other">Other / Needs Review</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Problem Description</label>
+                                <textarea id="new-description" placeholder="What is the customer's issue?"></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Assign To</label>
+                                <select id="new-assign">
+                                    <option value="">-- Select --</option>
+                                    <option value="Elie">Elie</option>
+                                    <option value="Chrisia">Chrisia</option>
+                                    <option value="Dinah">Dinah</option>
+                                </select>
+                            </div>
+
+                            <div class="action-row">
+                                <button type="submit" class="btn btn-primary">Save Enquiry</button>
+                                <button type="button" class="btn btn-secondary" onclick="switchPage('dashboard')">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- ENQUIRY LIST PAGE -->
+                <div class="page" id="enquiry-list-page">
+                    <div class="card">
+                        <h2>Enquiry List</h2>
+
+                        <div class="filter-bar">
+                            <input type="text" id="filter-search" placeholder="Search by name or phone..." onkeyup="filterEnquiries()">
+                            <select id="filter-status" onchange="filterEnquiries()">
+                                <option value="">All Statuses</option>
+                                <option value="NEW – NOT CONTACTED">New – Not Contacted</option>
+                                <option value="CONTACTED">Contacted</option>
+                                <option value="QUALIFIED">Qualified</option>
+                                <option value="WAITING FOR PHOTOS">Waiting for Photos</option>
+                                <option value="WAITING FOR INFORMATION">Waiting for Info</option>
+                                <option value="FOLLOW-UP REQUIRED">Follow-up Required</option>
+                                <option value="QUOTE APPOINTMENT BOOKED">Quote Booked</option>
+                                <option value="QUOTE COMPLETED">Quote Completed</option>
+                                <option value="JOB BOOKED">Job Booked</option>
+                                <option value="COULD NOT CONTACT">Could Not Contact</option>
+                                <option value="NOT PROCEEDING">Not Proceeding</option>
+                                <option value="NOT SUITABLE">Not Suitable</option>
+                                <option value="OUTSIDE SERVICE AREA">Outside Service Area</option>
+                                <option value="ESCALATE TO MANAGER">Manager Escalation</option>
+                            </select>
+                            <select id="filter-source" onchange="filterEnquiries()">
+                                <option value="">All Sources</option>
+                                <option value="Google">Google</option>
+                                <option value="Meta">Meta / Facebook</option>
+                                <option value="Website">Website</option>
+                                <option value="Phone">Phone</option>
+                                <option value="Referral">Referral</option>
+                                <option value="Returning">Returning Customer</option>
+                            </select>
+                            <select id="filter-assignee" onchange="filterEnquiries()">
+                                <option value="">All Staff</option>
+                                <option value="Elie">Elie</option>
+                                <option value="Chrisia">Chrisia</option>
+                                <option value="Dinah">Dinah</option>
+                            </select>
+                        </div>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Customer</th>
+                                    <th>Service</th>
+                                    <th>Lead Source</th>
+                                    <th>Status</th>
+                                    <th>Next Action Due</th>
+                                    <th>Assigned To</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody id="enquiry-list-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ENQUIRY DETAIL PAGE -->
+                <div class="page" id="enquiry-detail-page">
+                    <div class="card" style="margin-bottom: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <div>
+                                <h2 id="detail-customer-name" style="color: var(--dark); margin-bottom: 5px;">---</h2>
+                                <span id="detail-id" style="color: var(--gray); font-size: 12px;">ID: ---</span>
+                            </div>
+                            <button class="btn btn-secondary btn-small" onclick="switchPage('enquiry-list')">← Back to List</button>
+                        </div>
+                    </div>
+
+                    <!-- 60-SECOND READABILITY SECTION -->
+                    <div class="detail-section" style="border-left-color: var(--teal); margin-bottom: 20px;">
+                        <h3>📋 Quick Summary (60-Second View)</h3>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <div class="detail-item-label">Why They Contacted</div>
+                                <div class="detail-item-value" id="detail-why">Shower Leak</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">What They Need</div>
+                                <div class="detail-item-value" id="detail-need">Epoxy Regrouting</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Current Status</div>
+                                <div class="detail-item-value"><span id="detail-status-badge" class="status-badge">NEW</span></div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">What Happens Next</div>
+                                <div class="detail-item-value" id="detail-next-action">Call customer</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Due When</div>
+                                <div class="detail-item-value" id="detail-due-when">Today</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Who's Responsible</div>
+                                <div class="detail-item-value" id="detail-responsible">Elie</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CUSTOMER CONTACT DETAILS -->
+                    <div class="detail-section">
+                        <h3>📞 Customer Contact Details</h3>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <div class="detail-item-label">Mobile</div>
+                                <div class="detail-item-value" id="detail-phone">---</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Email</div>
+                                <div class="detail-item-value" id="detail-email">---</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Suburb</div>
+                                <div class="detail-item-value" id="detail-suburb">---</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Full Address</div>
+                                <div class="detail-item-value" id="detail-address">---</div>
+                            </div>
+                        </div>
+                        <button class="inline-edit-btn" onclick="openModal('edit-contact-modal')">✎ Edit Contact Details</button>
+                    </div>
+
+                    <!-- ENQUIRY DETAILS -->
+                    <div class="detail-section">
+                        <h3>📋 Enquiry Details</h3>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <div class="detail-item-label">Service Required</div>
+                                <div class="detail-item-value" id="detail-service">---</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Lead Source</div>
+                                <div class="detail-item-value" id="detail-source">---</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Received Date</div>
+                                <div class="detail-item-value" id="detail-created-date">---</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Received Time</div>
+                                <div class="detail-item-value" id="detail-created-time">---</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Assigned To</div>
+                                <div class="detail-item-value" id="detail-assigned">---</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">ServiceM8 Ref</div>
+                                <div class="detail-item-value" id="detail-servicem8">Not linked</div>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-top: 15px;">
+                            <label>Problem Description</label>
+                            <textarea id="detail-description" readonly style="background-color: var(--white);"></textarea>
+                        </div>
+                        <button class="inline-edit-btn" onclick="openModal('edit-enquiry-modal')">✎ Edit Enquiry Details</button>
+                    </div>
+
+                    <!-- QUOTE APPOINTMENT -->
+                    <div class="detail-section">
+                        <h3>📅 Quote Appointment</h3>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <div class="detail-item-label">Appointment Date</div>
+                                <div class="detail-item-value" id="detail-quote-date">Not scheduled</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Appointment Time</div>
+                                <div class="detail-item-value" id="detail-quote-time">---</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Full Address for Visit</div>
+                                <div class="detail-item-value" id="detail-visit-address">Not provided</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-item-label">Quote/Job Number</div>
+                                <div class="detail-item-value" id="detail-quote-ref">Not generated</div>
+                            </div>
+                        </div>
+                        <button class="inline-edit-btn" onclick="openModal('edit-appointment-modal')">✎ Schedule/Edit Appointment</button>
+                    </div>
+
+                    <!-- ACTION BUTTONS -->
+                    <div class="card">
+                        <h3>Actions</h3>
+                        <div class="action-row">
+                            <button class="btn btn-primary btn-small" onclick="openModal('log-call-modal')">📞 Log Call</button>
+                            <button class="btn btn-primary btn-small" onclick="openModal('log-email-modal')">📧 Log Email</button>
+                            <button class="btn btn-primary btn-small" onclick="openModal('update-status-modal')">📊 Change Status</button>
+                            <button class="btn btn-primary btn-small" onclick="openModal('update-action-modal')">⏰ Update Next Action</button>
+                            <button class="btn btn-primary btn-small" onclick="openModal('add-note-modal')">+ Add Note</button>
+                            <button class="btn btn-danger btn-small" onclick="openModal('escalate-modal')">🚨 Escalate</button>
+                        </div>
+                    </div>
+
+                    <!-- COMPLETE HISTORY -->
+                    <div class="card">
+                        <h3>Complete History & Timeline</h3>
+                        <div id="detail-history" style="max-height: 500px; overflow-y: auto;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FOLLOW-UP QUEUE PAGE -->
+                <div class="page" id="followup-queue-page">
+                    <div class="card">
+                        <h2>Follow-Up Queue (Sorted by Urgency)</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Status</th>
+                                    <th>Next Action</th>
+                                    <th>Days Overdue</th>
+                                    <th>Assigned To</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="followup-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- MANAGER ESCALATIONS PAGE -->
+                <div class="page" id="escalations-page">
+                    <div class="card">
+                        <h2>Manager Escalations</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Service</th>
+                                    <th>Escalation Reason</th>
+                                    <th>Escalated By</th>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="escalations-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- DAILY REPORT PAGE -->
+                <div class="page" id="daily-report-page">
+                    <div class="card">
+                        <h2>Daily Admin Report</h2>
+
+                        <div class="tabs">
+                            <div class="tab active" onclick="switchTab('start-checklist')">Morning Checklist</div>
+                            <div class="tab" onclick="switchTab('end-checklist')">Evening Checklist</div>
+                            <div class="tab" onclick="switchTab('activity-summary')">Activity Summary</div>
+                        </div>
+
+                        <!-- START CHECKLIST -->
+                        <div class="tab-content active" id="start-checklist">
+                            <h3>Start of Day - <span id="checklist-date"></span></h3>
+                            <div id="admin-checklists-start"></div>
+                        </div>
+
+                        <!-- END CHECKLIST -->
+                        <div class="tab-content" id="end-checklist">
+                            <h3>End of Day - <span id="checklist-date2"></span></h3>
+                            <div id="admin-checklists-end"></div>
+                        </div>
+
+                        <!-- ACTIVITY SUMMARY -->
+                        <div class="tab-content" id="activity-summary">
+                            <h3>Activity Summary - <span id="activity-date"></span></h3>
+                            <div class="card" style="background-color: var(--light-gray); margin-top: 20px;">
+                                <h4>Staff Performance</h4>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Admin</th>
+                                            <th>Enquiries</th>
+                                            <th>Calls</th>
+                                            <th>Emails</th>
+                                            <th>Status Changes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="staff-performance">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LEAD SOURCE REPORT PAGE -->
+                <div class="page" id="lead-report-page">
+                    <div class="card">
+                        <h2>Lead Source Report</h2>
+                        <p style="color: var(--gray); margin-bottom: 20px;">Track lead quality by source: from initial contact through to booked jobs.</p>
+
+                        <div class="filter-bar">
+                            <input type="date" id="report-start-date" onchange="updateLeadReport()">
+                            <input type="date" id="report-end-date" onchange="updateLeadReport()">
+                            <button class="btn btn-primary btn-small" onclick="updateLeadReport()">Update Report</button>
+                        </div>
+
+                        <table style="margin-top: 20px;">
+                            <thead>
+                                <tr>
+                                    <th>Lead Source</th>
+                                    <th>Total Leads</th>
+                                    <th>Contacted</th>
+                                    <th>Qualified</th>
+                                    <th>Quotes Booked</th>
+                                    <th>Quotes Completed</th>
+                                    <th>Jobs Booked</th>
+                                    <th>Lead→Qualified %</th>
+                                    <th>Quote→Job %</th>
+                                    <th>Lead→Job %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lead-report-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+
+    <!-- Save Confirmation Modal -->
+    <div class="modal" id="save-confirmation-modal">
+        <div class="modal-content confirmation-modal">
+            <h2>✓ Enquiry Saved Successfully</h2>
+            <p>Your new enquiry has been created and is ready to work with.</p>
+            <div class="confirmation-modal-id" id="confirmation-enquiry-id">ENQ-001</div>
+            <div class="confirmation-buttons">
+                <button class="btn btn-primary" onclick="viewSavedEnquiry()">👁️ View Enquiry</button>
+                <button class="btn btn-secondary" onclick="addAnother()">➕ Add Another</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Contact Details Modal -->
+    <div class="modal" id="edit-contact-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📞 Edit Contact Details</div>
+                <button class="modal-close" onclick="closeModal('edit-contact-modal')">×</button>
+            </div>
+            <form onsubmit="saveContactDetails(event)">
+                <div class="form-group">
+                    <label class="required">Email</label>
+                    <input type="email" id="edit-email" required>
+                </div>
+                <div class="form-group">
+                    <label>Suburb</label>
+                    <input type="text" id="edit-suburb">
+                </div>
+                <div class="form-group">
+                    <label>Full Property Address</label>
+                    <textarea id="edit-address" placeholder="Full address for site visit..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('edit-contact-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Details</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Enquiry Modal -->
+    <div class="modal" id="edit-enquiry-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📋 Edit Enquiry Details</div>
+                <button class="modal-close" onclick="closeModal('edit-enquiry-modal')">×</button>
+            </div>
+            <form onsubmit="saveEnquiryDetails(event)">
+                <div class="form-group">
+                    <label>Problem Description</label>
+                    <textarea id="edit-description" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Service Required</label>
+                    <select id="edit-service" required>
+                        <option value="Shower Leak">Shower Leak / Epoxy Regrouting</option>
+                        <option value="Bathroom">Bathroom Epoxy Regrouting</option>
+                        <option value="Balcony">Balcony Epoxy Regrouting / Repair</option>
+                        <option value="Shower Screen">Shower Screen</option>
+                        <option value="Shower Base">Shower Base / Repair</option>
+                        <option value="Multiple">Multiple Showers / Bathrooms</option>
+                        <option value="Caulking">Caulking Only (Review)</option>
+                        <option value="Shower Floor">Shower Floor Only (Review)</option>
+                        <option value="Unusual">Unusual / Unknown Work (Review)</option>
+                        <option value="Other">Other / Needs Review</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Assigned To</label>
+                    <select id="edit-assigned" required>
+                        <option value="Elie">Elie</option>
+                        <option value="Chrisia">Chrisia</option>
+                        <option value="Dinah">Dinah</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>ServiceM8 Reference</label>
+                    <input type="text" id="edit-servicem8" placeholder="Enter quote or job number...">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('edit-enquiry-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Appointment Modal -->
+    <div class="modal" id="edit-appointment-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📅 Schedule Quote Appointment</div>
+                <button class="modal-close" onclick="closeModal('edit-appointment-modal')">×</button>
+            </div>
+            <form onsubmit="saveAppointment(event)">
+                <div class="form-group">
+                    <label class="required">Appointment Date</label>
+                    <input type="date" id="edit-quote-date" required>
+                </div>
+                <div class="form-group">
+                    <label class="required">Appointment Time</label>
+                    <input type="time" id="edit-quote-time" required>
+                </div>
+                <div class="form-group">
+                    <label class="required">Full Address for Site Visit</label>
+                    <textarea id="edit-visit-address" required placeholder="Full property address..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Quote/Job Reference (from ServiceM8)</label>
+                    <input type="text" id="edit-quote-ref" placeholder="e.g., Q-2024-001 or JOB-2024-456">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('edit-appointment-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Appointment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Log Call Modal -->
+    <div class="modal" id="log-call-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📞 Log Call</div>
+                <button class="modal-close" onclick="closeModal('log-call-modal')">×</button>
+            </div>
+            <form onsubmit="logCall(event)">
+                <div class="form-group">
+                    <label>Call Notes</label>
+                    <textarea id="call-notes" required placeholder="What was discussed during the call?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="required">Customer Response</label>
+                    <select id="call-response" required>
+                        <option value="">-- Select --</option>
+                        <option value="Customer available, discussed issue">Customer available, discussed issue</option>
+                        <option value="Customer not available, will call back">Customer not available, will call back</option>
+                        <option value="Customer declining service">Customer declining service</option>
+                        <option value="Customer confirmed appointment">Customer confirmed appointment</option>
+                        <option value="Phone number incorrect">Phone number incorrect</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('log-call-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Call Log</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Log Email Modal -->
+    <div class="modal" id="log-email-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📧 Log Email</div>
+                <button class="modal-close" onclick="closeModal('log-email-modal')">×</button>
+            </div>
+            <form onsubmit="logEmail(event)">
+                <div class="form-group">
+                    <label>Email Notes</label>
+                    <textarea id="email-notes" required placeholder="What did you email about?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="required">Email Type</label>
+                    <select id="email-type" required>
+                        <option value="">-- Select --</option>
+                        <option value="Initial inquiry">Initial inquiry</option>
+                        <option value="Photos requested">Photos requested</option>
+                        <option value="Quote sent">Quote sent</option>
+                        <option value="Follow-up">Follow-up</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('log-email-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Email Log</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Update Status Modal -->
+    <div class="modal" id="update-status-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📊 Change Status</div>
+                <button class="modal-close" onclick="closeModal('update-status-modal')">×</button>
+            </div>
+            <form onsubmit="updateStatus(event)">
+                <div class="form-group">
+                    <label class="required">New Status</label>
+                    <select id="new-status-select" required>
+                        <option value="">-- Select --</option>
+                        <option value="NEW – NOT CONTACTED">New – Not Contacted</option>
+                        <option value="CONTACTED">Contacted</option>
+                        <option value="QUALIFIED">Qualified</option>
+                        <option value="WAITING FOR PHOTOS">Waiting for Photos</option>
+                        <option value="WAITING FOR INFORMATION">Waiting for Information</option>
+                        <option value="FOLLOW-UP REQUIRED">Follow-up Required</option>
+                        <option value="QUOTE APPOINTMENT BOOKED">Quote Appointment Booked</option>
+                        <option value="QUOTE COMPLETED">Quote Completed</option>
+                        <option value="JOB BOOKED">Job Booked</option>
+                        <option value="COULD NOT CONTACT">Could Not Contact</option>
+                        <option value="NOT PROCEEDING">Not Proceeding</option>
+                        <option value="NOT SUITABLE">Not Suitable</option>
+                        <option value="OUTSIDE SERVICE AREA">Outside Service Area</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Reason for Change (optional)</label>
+                    <textarea id="status-reason" placeholder="Why is the status changing?"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('update-status-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Update Next Action Modal -->
+    <div class="modal" id="update-action-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">⏰ Update Next Action</div>
+                <button class="modal-close" onclick="closeModal('update-action-modal')">×</button>
+            </div>
+            <form onsubmit="updateNextAction(event)">
+                <div class="form-group">
+                    <label class="required">Action Type</label>
+                    <select id="action-type-select" required>
+                        <option value="">-- Select --</option>
+                        <option value="CALL">Call Customer</option>
+                        <option value="EMAIL">Send Email</option>
+                        <option value="WAITING FOR PHOTOS">Waiting for Photos</option>
+                        <option value="WAITING FOR INFORMATION">Waiting for Information</option>
+                        <option value="FOLLOW-UP">Follow-up</option>
+                        <option value="SCHEDULE APPOINTMENT">Schedule Appointment</option>
+                        <option value="AWAITING CUSTOMER DECISION">Awaiting Customer Decision</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="required">Due Date</label>
+                    <input type="date" id="action-due-date" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('update-action-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Action</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Note Modal -->
+    <div class="modal" id="add-note-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">+ Add Note</div>
+                <button class="modal-close" onclick="closeModal('add-note-modal')">×</button>
+            </div>
+            <form onsubmit="addNote(event)">
+                <div class="form-group">
+                    <label>Note</label>
+                    <textarea id="new-note" required placeholder="Add a note to this enquiry..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('add-note-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Note</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Escalate Modal -->
+    <div class="modal" id="escalate-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">🚨 Escalate to Manager</div>
+                <button class="modal-close" onclick="closeModal('escalate-modal')">×</button>
+            </div>
+            <form onsubmit="escalateToManager(event)">
+                <div class="form-group">
+                    <label class="required">Reason for Escalation</label>
+                    <select id="escalate-reason" required>
+                        <option value="">-- Select --</option>
+                        <option value="Unsure if we can do this job">Unsure if we can do this job</option>
+                        <option value="Customer outside service area">Customer outside service area</option>
+                        <option value="Needs to discuss pricing">Needs to discuss pricing</option>
+                        <option value="Caulking only request">Caulking only request</option>
+                        <option value="Shower floor only request">Shower floor only request</option>
+                        <option value="Unusual or unknown work">Unusual or unknown work</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Additional Details</label>
+                    <textarea id="escalate-notes" placeholder="Provide more context..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('escalate-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Escalate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // APPLICATION STATE
+        let enquiries = [];
+        let currentAdmin = 'Elie';
+        let currentEnquiryId = null;
+        let currentPage = 'dashboard';
+        let lastSavedEnquiryId = null;
+
+        // SHARED PERSISTENCE
+        // This dashboard is served from the SuperSealed backend, so every
+        // save also goes to that backend's shared store - any staff member,
+        // any device, sees the same enquiries. localStorage is kept only as
+        // an instant local cache / offline fallback, never the source of
+        // truth once the server is reachable.
+        function saveEnquiriesToStorage() {
+            try {
+                localStorage.setItem('supersealed_enquiries', JSON.stringify(enquiries));
+            } catch (e) {
+                console.error('Failed to save enquiries locally:', e);
+            }
+            fetch('/api/enquiries', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enquiries })
+            }).catch(e => console.error('Failed to save enquiries to shared server:', e));
+        }
+
+        function loadEnquiriesFromStorage() {
+            try {
+                const saved = localStorage.getItem('supersealed_enquiries');
+                if (saved) {
+                    enquiries = JSON.parse(saved);
+                    return true;
+                }
+            } catch (e) {
+                console.error('Failed to load enquiries:', e);
+            }
+            return false;
+        }
+
+        // Pulls the shared list from the backend (the real source of truth
+        // once it's reachable) and replaces the in-memory + local copy with
+        // it. Returns true on success so callers know not to fall back.
+        async function loadEnquiriesFromServer() {
+            try {
+                const res = await fetch('/api/enquiries');
+                const data = await res.json();
+                if (data.status === 'success' && Array.isArray(data.enquiries) && data.enquiries.length > 0) {
+                    enquiries = data.enquiries;
+                    try { localStorage.setItem('supersealed_enquiries', JSON.stringify(enquiries)); } catch (e) {}
+                    return true;
+                }
+            } catch (e) {
+                console.error('Failed to load enquiries from shared server:', e);
+            }
+            return false;
+        }
+
+        // INITIALIZE WITH FAKE DATA
+        function initializeFakeData() {
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const twoAgo = new Date(today);
+            twoAgo.setDate(twoAgo.getDate() - 2);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const threeDays = new Date(today);
+            threeDays.setDate(threeDays.getDate() + 3);
+
+            const formatDate = (date) => date.toISOString().split('T')[0];
+            const formatTime = (date) => date.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+
+            enquiries = [
+                {
+                    id: 'ENQ-001',
+                    name: 'John Smith',
+                    phone: '0412 345 678',
+                    email: 'john@email.com',
+                    suburb: 'Thornleigh',
+                    address: '',
+                    service: 'Shower Leak',
+                    source: 'Google',
+                    description: 'Shower enclosure leaking from corner seam',
+                    status: 'NEW – NOT CONTACTED',
+                    assignedTo: 'Elie',
+                    created: formatDate(today),
+                    createdTime: '09:30',
+                    nextActionDue: formatDate(today),
+                    nextActionType: 'CALL',
+                    servicem8Ref: '',
+                    quoteDate: '',
+                    quoteTime: '',
+                    visitAddress: '',
+                    quoteRef: '',
+                    history: [
+                        { date: formatDate(today), time: '09:30', staff: 'Elie', action: 'ENQUIRY LOGGED', notes: 'Customer called, described leak. Requested photos.' }
+                    ]
+                },
+                {
+                    id: 'ENQ-002',
+                    name: 'Sarah Williams',
+                    phone: '0498 765 432',
+                    email: 'sarah@email.com',
+                    suburb: 'Balwyn',
+                    address: '42 Oak Street, Balwyn VIC 3103',
+                    service: 'Bathroom',
+                    source: 'Meta',
+                    description: 'Bathroom grout deteriorating, needs full regrouting',
+                    status: 'CONTACTED',
+                    assignedTo: 'Chrisia',
+                    created: formatDate(yesterday),
+                    createdTime: '14:15',
+                    nextActionDue: formatDate(today),
+                    nextActionType: 'EMAIL',
+                    servicem8Ref: '',
+                    quoteDate: '',
+                    quoteTime: '',
+                    visitAddress: '',
+                    quoteRef: '',
+                    history: [
+                        { date: formatDate(yesterday), time: '14:15', staff: 'Chrisia', action: 'ENQUIRY LOGGED', notes: 'Meta lead' },
+                        { date: formatDate(today), time: '10:00', staff: 'Chrisia', action: 'CALL', notes: 'Customer answered, confirmed issue, quote requested via email.' }
+                    ]
+                }
+            ];
+
+            updateDashboard();
+        }
+
+        // SWITCH PAGES
+        function switchPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+            const pageMap = {
+                'dashboard': { el: 'dashboard-page', title: 'Dashboard', nav: 0 },
+                'add-enquiry': { el: 'add-enquiry-page', title: 'New Enquiry', nav: 1 },
+                'enquiry-list': { el: 'enquiry-list-page', title: 'Enquiry List', nav: 2 },
+                'enquiry-detail': { el: 'enquiry-detail-page', title: 'Enquiry Detail', nav: -1 },
+                'followup-queue': { el: 'followup-queue-page', title: 'Follow-Up Queue', nav: 3 },
+                'escalations': { el: 'escalations-page', title: 'Manager Escalations', nav: 4 },
+                'daily-report': { el: 'daily-report-page', title: 'Daily Admin Report', nav: 5 },
+                'lead-report': { el: 'lead-report-page', title: 'Lead Source Report', nav: 6 }
+            };
+
+            const pageInfo = pageMap[page];
+            if (pageInfo) {
+                document.getElementById(pageInfo.el).classList.add('active');
+                document.getElementById('page-title').textContent = pageInfo.title;
+                if (pageInfo.nav >= 0) {
+                    document.querySelectorAll('.nav-item')[pageInfo.nav].classList.add('active');
+                }
+                currentPage = page;
+
+                if (page === 'enquiry-list') renderEnquiryList();
+                if (page === 'followup-queue') renderFollowupQueue();
+                if (page === 'escalations') renderEscalations();
+                if (page === 'daily-report') renderDailyReport();
+                if (page === 'lead-report') renderLeadReport();
+
+                // Close mobile sidebar after navigation
+                if (window.innerWidth <= 768) {
+                    document.querySelector('.sidebar').classList.remove('open');
+                }
+            }
+        }
+
+        // TOGGLE MOBILE SIDEBAR
+        function toggleMobileSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            sidebar.classList.toggle('open');
+        }
+
+        // SWITCH ADMIN
+        function switchAdmin() {
+            const select = document.getElementById('admin-select');
+            currentAdmin = select.value;
+        }
+
+        // UPDATE DASHBOARD
+        function updateDashboard() {
+            const today = new Date().toISOString().split('T')[0];
+
+            let newToday = 0, notContacted = 0, qualified = 0, quotesBooked = 0;
+            let waitingPhotos = 0, followupToday = 0, overdue = 0, escalations = 0;
+
+            enquiries.forEach(e => {
+                if (e.created === today && e.status === 'NEW – NOT CONTACTED') newToday++;
+                if (e.status === 'NEW – NOT CONTACTED' && e.created < today) notContacted++;
+                if (e.status === 'QUALIFIED') qualified++;
+                if (e.status === 'QUOTE APPOINTMENT BOOKED') quotesBooked++;
+                if (e.status === 'WAITING FOR PHOTOS') waitingPhotos++;
+                if (e.nextActionDue === today && ['NEW – NOT CONTACTED', 'CONTACTED', 'QUALIFIED', 'WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED'].includes(e.status)) followupToday++;
+                if (e.nextActionDue && e.nextActionDue < today && ['NEW – NOT CONTACTED', 'CONTACTED', 'QUALIFIED', 'WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED'].includes(e.status)) overdue++;
+                if (e.status === 'ESCALATE TO MANAGER') escalations++;
+            });
+
+            document.getElementById('metric-new-today').textContent = newToday;
+            document.getElementById('metric-not-contacted').textContent = notContacted;
+            document.getElementById('metric-qualified').textContent = qualified;
+            document.getElementById('metric-quotes-booked').textContent = quotesBooked;
+            document.getElementById('metric-waiting-photos').textContent = waitingPhotos;
+            document.getElementById('metric-followup-today').textContent = followupToday;
+            document.getElementById('metric-overdue').textContent = overdue;
+            document.getElementById('metric-escalations').textContent = escalations;
+
+            // Recent activity
+            let tbody = document.getElementById('dashboard-recent');
+            tbody.innerHTML = '';
+            enquiries.slice(-10).reverse().forEach(e => {
+                let row = tbody.insertRow();
+                row.onclick = () => viewEnquiry(e.id);
+                row.style.cursor = 'pointer';
+                row.innerHTML = `
+                    <td>${e.id}</td>
+                    <td>${e.name}</td>
+                    <td>${e.source}</td>
+                    <td><span class="status-badge ${getStatusClass(e.status)}">${e.status.substring(0, 15)}</span></td>
+                    <td>${e.nextActionDue || '-'}</td>
+                    <td>${e.created}</td>
+                `;
+            });
+        }
+
+        // SAVE NEW ENQUIRY
+        function saveEnquiry(event) {
+            event.preventDefault();
+            const today = new Date();
+            const formattedDate = today.toISOString().split('T')[0];
+            const formattedTime = today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+
+            const newEnquiry = {
+                id: 'ENQ-' + String(enquiries.length + 1).padStart(3, '0'),
+                name: document.getElementById('new-name').value,
+                phone: document.getElementById('new-phone').value,
+                email: document.getElementById('new-email').value,
+                suburb: document.getElementById('new-suburb').value,
+                address: '',
+                service: document.getElementById('new-service').value,
+                source: document.getElementById('new-source').value,
+                description: document.getElementById('new-description').value,
+                status: 'NEW – NOT CONTACTED',
+                assignedTo: document.getElementById('new-assign').value,
+                created: formattedDate,
+                createdTime: formattedTime,
+                nextActionDue: formattedDate,
+                nextActionType: 'CALL',
+                servicem8Ref: '',
+                quoteDate: '',
+                quoteTime: '',
+                visitAddress: '',
+                quoteRef: '',
+                history: [
+                    {
+                        date: formattedDate,
+                        time: formattedTime,
+                        staff: currentAdmin,
+                        action: 'ENQUIRY LOGGED',
+                        notes: document.getElementById('new-description').value || 'Enquiry created'
+                    }
+                ]
+            };
+
+            enquiries.push(newEnquiry);
+
+            // Check if service requires escalation
+            const reviewServices = ['Caulking', 'Shower Floor', 'Unusual', 'Other'];
+            if (reviewServices.some(s => newEnquiry.service.includes(s))) {
+                newEnquiry.status = 'ESCALATE TO MANAGER';
+                newEnquiry.escalationReason = 'Service type flagged for manager review';
+                newEnquiry.history.push({
+                    date: formattedDate,
+                    time: formattedTime,
+                    staff: currentAdmin,
+                    action: 'AUTO-ESCALATE',
+                    notes: 'Service type requires manager approval'
+                });
+            }
+
+            lastSavedEnquiryId = newEnquiry.id;
+
+            // Clear form
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-phone').value = '';
+            document.getElementById('new-email').value = '';
+            document.getElementById('new-suburb').value = '';
+            document.getElementById('new-service').value = '';
+            document.getElementById('new-source').value = '';
+            document.getElementById('new-description').value = '';
+
+            updateDashboard();
+            saveEnquiriesToStorage();
+
+            // Show confirmation modal
+            document.getElementById('confirmation-enquiry-id').textContent = 'Enquiry ID: ' + newEnquiry.id;
+            openModal('save-confirmation-modal');
+        }
+
+        // VIEW SAVED ENQUIRY
+        function viewSavedEnquiry() {
+            closeModal('save-confirmation-modal');
+            if (lastSavedEnquiryId) {
+                viewEnquiry(lastSavedEnquiryId);
+            }
+        }
+
+        // ADD ANOTHER
+        function addAnother() {
+            closeModal('save-confirmation-modal');
+            switchPage('add-enquiry');
+            document.getElementById('new-name').focus();
+        }
+
+        // RENDER ENQUIRY LIST
+        function renderEnquiryList() {
+            const tbody = document.getElementById('enquiry-list-body');
+            tbody.innerHTML = '';
+
+            enquiries.forEach(e => {
+                const row = tbody.insertRow();
+                row.style.cursor = 'pointer';
+                row.onclick = () => viewEnquiry(e.id);
+
+                const isOverdue = e.nextActionDue && e.nextActionDue < new Date().toISOString().split('T')[0];
+                const statusClass = getStatusClass(e.status);
+
+                row.innerHTML = `
+                    <td>${e.id}</td>
+                    <td>${e.name}</td>
+                    <td>${e.service.substring(0, 20)}</td>
+                    <td>${e.source}</td>
+                    <td><span class="status-badge ${statusClass}">${e.status.substring(0, 12)}</span></td>
+                    <td ${isOverdue ? 'class="overdue"' : ''}>${e.nextActionDue || 'No action' }</td>
+                    <td>${e.assignedTo}</td>
+                    <td>${e.created}</td>
+                `;
+            });
+        }
+
+        // FILTER ENQUIRIES
+        function filterEnquiries() {
+            const search = document.getElementById('filter-search').value.toLowerCase();
+            const status = document.getElementById('filter-status').value;
+            const source = document.getElementById('filter-source').value;
+            const assignee = document.getElementById('filter-assignee').value;
+
+            const tbody = document.getElementById('enquiry-list-body');
+            tbody.innerHTML = '';
+
+            enquiries.filter(e => {
+                const matchesSearch = !search || e.name.toLowerCase().includes(search) || e.phone.includes(search);
+                const matchesStatus = !status || e.status === status;
+                const matchesSource = !source || e.source === source;
+                const matchesAssignee = !assignee || e.assignedTo === assignee;
+                return matchesSearch && matchesStatus && matchesSource && matchesAssignee;
+            }).forEach(e => {
+                const row = tbody.insertRow();
+                row.style.cursor = 'pointer';
+                row.onclick = () => viewEnquiry(e.id);
+
+                const isOverdue = e.nextActionDue && e.nextActionDue < new Date().toISOString().split('T')[0];
+                const statusClass = getStatusClass(e.status);
+
+                row.innerHTML = `
+                    <td>${e.id}</td>
+                    <td>${e.name}</td>
+                    <td>${e.service.substring(0, 20)}</td>
+                    <td>${e.source}</td>
+                    <td><span class="status-badge ${statusClass}">${e.status.substring(0, 12)}</span></td>
+                    <td ${isOverdue ? 'class="overdue"' : ''}>${e.nextActionDue || 'No action'}</td>
+                    <td>${e.assignedTo}</td>
+                    <td>${e.created}</td>
+                `;
+            });
+        }
+
+        // VIEW ENQUIRY DETAIL
+        function viewEnquiry(id) {
+            currentEnquiryId = id;
+            const e = enquiries.find(eq => eq.id === id);
+            if (!e) {
+                alert('Enquiry not found!');
+                return;
+            }
+
+            // 60-SECOND SUMMARY
+            document.getElementById('detail-customer-name').textContent = e.name;
+            document.getElementById('detail-id').textContent = 'ID: ' + e.id;
+            document.getElementById('detail-why').textContent = e.service;
+            document.getElementById('detail-need').textContent = e.description || e.service;
+
+            const statusEl = document.getElementById('detail-status-badge');
+            statusEl.textContent = e.status;
+            statusEl.className = 'status-badge ' + getStatusClass(e.status);
+
+            document.getElementById('detail-next-action').textContent = e.nextActionType || 'No action set';
+            document.getElementById('detail-due-when').textContent = e.nextActionDue || 'Not scheduled';
+            document.getElementById('detail-responsible').textContent = e.assignedTo;
+
+            // CUSTOMER CONTACT
+            document.getElementById('detail-phone').textContent = e.phone;
+            document.getElementById('detail-email').textContent = e.email || 'Not provided';
+            document.getElementById('detail-suburb').textContent = e.suburb || 'Suburb not provided';
+            document.getElementById('detail-address').textContent = e.address || 'Not provided yet';
+
+            // ENQUIRY DETAILS
+            document.getElementById('detail-service').textContent = e.service;
+            document.getElementById('detail-source').textContent = e.source;
+            document.getElementById('detail-created-date').textContent = e.created;
+            document.getElementById('detail-created-time').textContent = e.createdTime;
+            document.getElementById('detail-assigned').textContent = e.assignedTo;
+            document.getElementById('detail-servicem8').textContent = e.servicem8Ref || 'Not linked';
+            document.getElementById('detail-description').value = e.description;
+
+            // QUOTE APPOINTMENT
+            document.getElementById('detail-quote-date').textContent = e.quoteDate || 'Not scheduled';
+            document.getElementById('detail-quote-time').textContent = e.quoteTime || '---';
+            document.getElementById('detail-visit-address').textContent = e.visitAddress || 'Not provided';
+            document.getElementById('detail-quote-ref').textContent = e.quoteRef || 'Not generated';
+
+            // Populate edit modals
+            document.getElementById('edit-email').value = e.email;
+            document.getElementById('edit-suburb').value = e.suburb;
+            document.getElementById('edit-address').value = e.address;
+            document.getElementById('edit-description').value = e.description;
+            document.getElementById('edit-service').value = e.service;
+            document.getElementById('edit-assigned').value = e.assignedTo;
+            document.getElementById('edit-servicem8').value = e.servicem8Ref;
+            document.getElementById('edit-quote-date').value = e.quoteDate;
+            document.getElementById('edit-quote-time').value = e.quoteTime;
+            document.getElementById('edit-visit-address').value = e.visitAddress;
+            document.getElementById('edit-quote-ref').value = e.quoteRef;
+
+            // HISTORY - MOST RECENT FIRST
+            const historyEl = document.getElementById('detail-history');
+            historyEl.innerHTML = '';
+            if (e.history && e.history.length > 0) {
+                const sortedHistory = [...e.history].reverse();
+                sortedHistory.forEach(h => {
+                    historyEl.innerHTML += `
+                        <div class="history-entry">
+                            <div class="history-entry-meta">
+                                <strong>${h.staff}</strong>
+                                <span>${h.date} ${h.time}</span>
+                            </div>
+                            <div class="history-entry-action">${h.action}</div>
+                            <div class="history-entry-text">${h.notes}</div>
+                        </div>
+                    `;
+                });
+            }
+
+            switchPage('enquiry-detail');
+        }
+
+        // SAVE CONTACT DETAILS
+        function saveContactDetails(event) {
+            event.preventDefault();
+            const e = enquiries.find(eq => eq.id === currentEnquiryId);
+            if (!e) return;
+
+            const oldEmail = e.email;
+            const oldSuburb = e.suburb;
+            const oldAddress = e.address;
+
+            e.email = document.getElementById('edit-email').value;
+            e.suburb = document.getElementById('edit-suburb').value;
+            e.address = document.getElementById('edit-address').value;
+
+            const today = new Date();
+            e.history.push({
+                date: today.toISOString().split('T')[0],
+                time: today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                staff: currentAdmin,
+                action: 'DETAILS UPDATED',
+                notes: `Email: ${oldEmail} → ${e.email}, Suburb: ${oldSuburb} → ${e.suburb}, Address updated`
+            });
+
+            closeModal('edit-contact-modal');
+            viewEnquiry(currentEnquiryId);
+            updateDashboard();
+            saveEnquiriesToStorage();
+        }
+
+        // SAVE ENQUIRY DETAILS
+        function saveEnquiryDetails(event) {
+            event.preventDefault();
+            const e = enquiries.find(eq => eq.id === currentEnquiryId);
+            if (!e) return;
+
+            e.description = document.getElementById('edit-description').value;
+            e.service = document.getElementById('edit-service').value;
+            e.assignedTo = document.getElementById('edit-assigned').value;
+            e.servicem8Ref = document.getElementById('edit-servicem8').value;
+
+            const today = new Date();
+            e.history.push({
+                date: today.toISOString().split('T')[0],
+                time: today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                staff: currentAdmin,
+                action: 'ENQUIRY UPDATED',
+                notes: `Service: ${e.service}, Assigned to: ${e.assignedTo}, ServiceM8 Ref: ${e.servicem8Ref}`
+            });
+
+            closeModal('edit-enquiry-modal');
+            viewEnquiry(currentEnquiryId);
+            updateDashboard();
+            saveEnquiriesToStorage();
+        }
+
+        // SAVE APPOINTMENT
+        function saveAppointment(event) {
+            event.preventDefault();
+            const e = enquiries.find(eq => eq.id === currentEnquiryId);
+            if (!e) return;
+
+            e.quoteDate = document.getElementById('edit-quote-date').value;
+            e.quoteTime = document.getElementById('edit-quote-time').value;
+            e.visitAddress = document.getElementById('edit-visit-address').value;
+            e.quoteRef = document.getElementById('edit-quote-ref').value;
+
+            if (e.status !== 'QUOTE APPOINTMENT BOOKED') {
+                e.status = 'QUOTE APPOINTMENT BOOKED';
+            }
+
+            const today = new Date();
+            e.history.push({
+                date: today.toISOString().split('T')[0],
+                time: today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                staff: currentAdmin,
+                action: 'APPOINTMENT BOOKED',
+                notes: `Quote appointment: ${e.quoteDate} at ${e.quoteTime}, Location: ${e.visitAddress}`
+            });
+
+            closeModal('edit-appointment-modal');
+            viewEnquiry(currentEnquiryId);
+            updateDashboard();
+            saveEnquiriesToStorage();
+        }
+
+        // LOG CALL
+        function logCall(event) {
+            event.preventDefault();
+            const e = enquiries.find(eq => eq.id === currentEnquiryId);
+            if (!e) return;
+
+            const notes = document.getElementById('call-notes').value;
+            const response = document.getElementById('call-response').value;
+            const today = new Date();
+
+            e.history.push({
+                date: today.toISOString().split('T')[0],
+                time: today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                staff: currentAdmin,
+                action: 'CALL',
+                notes: notes + ' [' + response + ']'
+            });
+
+            document.getElementById('call-notes').value = '';
+            document.getElementById('call-response').value = '';
+            closeModal('log-call-modal');
+            viewEnquiry(currentEnquiryId);
+            updateDashboard();
+            saveEnquiriesToStorage();
+        }
+
+        // LOG EMAIL
+        function logEmail(event) {
+            event.preventDefault();
+            const e = enquiries.find(eq => eq.id === currentEnquiryId);
+            if (!e) return;
+
+            const notes = document.getElementById('email-notes').value;
+            const type = document.getElementById('email-type').value;
+            const today = new Date();
+
+            e.history.push({
+                date: today.toISOString().split('T')[0],
+                time: today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                staff: currentAdmin,
+                action: 'EMAIL',
+                notes: notes + ' [' + type + ']'
+            });
+
+            document.getElementById('email-notes').value = '';
+            document.getElementById('email-type').value = '';
+            closeModal('log-email-modal');
+            viewEnquiry(currentEnquiryId);
+            updateDashboard();
+            saveEnquiriesToStorage();
+        }
+
+        // UPDATE STATUS
+        function updateStatus(event) {
+            event.preventDefault();
+            const e = enquiries.find(eq => eq.id === currentEnquiryId);
+            if (!e) return;
+
+            const oldStatus = e.status;
+            const newStatus = document.getElementById('new-status-select').value;
+            const reason = document.getElementById('status-reason').value;
+            const today = new Date();
+
+            e.status = newStatus;
+
+            e.history.push({
+                date: today.toISOString().split('T')[0],
+                time: today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                staff: currentAdmin,
+                action: 'STATUS CHANGE',
+                notes: `${oldStatus} → ${newStatus}${reason ? ' (' + reason + ')' : ''}`
+            });
+
+            // If closed status, remove next action
+            const closedStatuses = ['JOB BOOKED', 'COULD NOT CONTACT', 'NOT PROCEEDING', 'NOT SUITABLE', 'OUTSIDE SERVICE AREA'];
+            if (closedStatuses.includes(newStatus)) {
+                e.nextActionDue = null;
+                e.nextActionType = null;
+            }
+
+            document.getElementById('new-status-select').value = '';
+            document.getElementById('status-reason').value = '';
+            closeModal('update-status-modal');
+            viewEnquiry(currentEnquiryId);
+            updateDashboard();
+            saveEnquiriesToStorage();
+        }
+
+        // UPDATE NEXT ACTION
+        function updateNextAction(event) {
+            event.preventDefault();
+            const e = enquiries.find(eq => eq.id === currentEnquiryId);
+            if (!e) return;
+
+            const actionType = document.getElementById('action-type-select').value;
+            const dueDate = document.getElementById('action-due-date').value;
+            const today = new Date();
+
+            e.nextActionType = actionType;
+            e.nextActionDue = dueDate;
+
+            e.history.push({
+                date: today.toISOString().split('T')[0],
+                time: today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                staff: currentAdmin,
+                action: 'NEXT ACTION SET',
+                notes: `${actionType} due ${dueDate}`
+            });
+
+            document.getElementById('action-type-select').value = '';
+            document.getElementById('action-due-date').value = '';
+            closeModal('update-action-modal');
+            viewEnquiry(currentEnquiryId);
+            updateDashboard();
+            saveEnquiriesToStorage();
+        }
+
+        // ADD NOTE
+        function addNote(event) {
+            event.preventDefault();
+            const e = enquiries.find(eq => eq.id === currentEnquiryId);
+            if (!e) return;
+
+            const note = document.getElementById('new-note').value;
+            const today = new Date();
+
+            e.history.push({
+                date: today.toISOString().split('T')[0],
+                time: today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                staff: currentAdmin,
+                action: 'NOTE',
+                notes: note
+            });
+
+            document.getElementById('new-note').value = '';
+            closeModal('add-note-modal');
+            viewEnquiry(currentEnquiryId);
+            saveEnquiriesToStorage();
+        }
+
+        // ESCALATE TO MANAGER
+        function escalateToManager(event) {
+            event.preventDefault();
+            const e = enquiries.find(eq => eq.id === currentEnquiryId);
+            if (!e) return;
+
+            const reason = document.getElementById('escalate-reason').value;
+            const notes = document.getElementById('escalate-notes').value;
+            const today = new Date();
+
+            const oldStatus = e.status;
+            e.status = 'ESCALATE TO MANAGER';
+            e.escalationReason = reason;
+            e.nextActionDue = null;
+            e.nextActionType = null;
+
+            e.history.push({
+                date: today.toISOString().split('T')[0],
+                time: today.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                staff: currentAdmin,
+                action: 'ESCALATE',
+                notes: `Escalated: ${reason}${notes ? ' - ' + notes : ''}`
+            });
+
+            document.getElementById('escalate-reason').value = '';
+            document.getElementById('escalate-notes').value = '';
+            closeModal('escalate-modal');
+            viewEnquiry(currentEnquiryId);
+            updateDashboard();
+            saveEnquiriesToStorage();
+        }
+
+        // RENDER FOLLOW-UP QUEUE
+        function renderFollowupQueue() {
+            const today = new Date().toISOString().split('T')[0];
+            const tbody = document.getElementById('followup-body');
+            tbody.innerHTML = '';
+
+            enquiries
+                .filter(e => e.nextActionDue)
+                .sort((a, b) => {
+                    const aOverdue = a.nextActionDue < today ? -1 : (a.nextActionDue === today ? 0 : 1);
+                    const bOverdue = b.nextActionDue < today ? -1 : (b.nextActionDue === today ? 0 : 1);
+                    if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+                    return new Date(a.nextActionDue) - new Date(b.nextActionDue);
+                })
+                .forEach(e => {
+                    const row = tbody.insertRow();
+                    const daysOverdue = (new Date(today) - new Date(e.nextActionDue)) / (1000 * 60 * 60 * 24);
+                    const overdueText = daysOverdue > 0 ? `${Math.floor(daysOverdue)} days` : (daysOverdue === 0 ? 'Today' : 'Due soon');
+
+                    row.innerHTML = `
+                        <td onclick="viewEnquiry('${e.id}')" style="cursor: pointer;">${e.name}</td>
+                        <td onclick="viewEnquiry('${e.id}')" style="cursor: pointer;"><span class="status-badge ${getStatusClass(e.status)}">${e.status.substring(0, 15)}</span></td>
+                        <td onclick="viewEnquiry('${e.id}')" style="cursor: pointer;">${e.nextActionType}</td>
+                        <td ${daysOverdue > 0 ? 'class="overdue"' : ''}>${overdueText}</td>
+                        <td>${e.assignedTo}</td>
+                        <td>
+                            <button class="btn btn-primary btn-small" onclick="viewEnquiry('${e.id}')">View</button>
+                        </td>
+                    `;
+                });
+        }
+
+        // RENDER ESCALATIONS
+        function renderEscalations() {
+            const tbody = document.getElementById('escalations-body');
+            tbody.innerHTML = '';
+
+            enquiries
+                .filter(e => e.status === 'ESCALATE TO MANAGER')
+                .forEach(e => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td onclick="viewEnquiry('${e.id}')" style="cursor: pointer;">${e.name}</td>
+                        <td onclick="viewEnquiry('${e.id}')" style="cursor: pointer;">${e.service}</td>
+                        <td onclick="viewEnquiry('${e.id}')" style="cursor: pointer;">${e.escalationReason || 'No reason'}</td>
+                        <td>${e.assignedTo}</td>
+                        <td>${e.created}</td>
+                        <td><span class="status-badge status-escalate">Pending</span></td>
+                        <td>
+                            <button class="btn btn-primary btn-small" onclick="viewEnquiry('${e.id}')">Review</button>
+                        </td>
+                    `;
+                });
+        }
+
+        // RENDER DAILY REPORT
+        function renderDailyReport() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('checklist-date').textContent = today;
+            document.getElementById('checklist-date2').textContent = today;
+            document.getElementById('activity-date').textContent = today;
+
+            // Per-admin checklists
+            const admins = ['Elie', 'Chrisia', 'Dinah'];
+
+            // START CHECKLISTS
+            const startChecklistDiv = document.getElementById('admin-checklists-start');
+            startChecklistDiv.innerHTML = '';
+            admins.forEach(admin => {
+                const checklistKey = `start-checklist-${admin}-${today}`;
+                const checklist = JSON.parse(localStorage.getItem(checklistKey) || '{"email":false,"enquiries":false,"followups":false,"completed":""}');
+
+                startChecklistDiv.innerHTML += `
+                    <div style="background-color: var(--light-gray); padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                        <h4>${admin}</h4>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="start-email-${admin}" ${checklist.email ? 'checked' : ''} onchange="saveAdminChecklist('start', '${admin}')">
+                            <label for="start-email-${admin}">Email checked for new leads</label>
+                        </div>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="start-enquiries-${admin}" ${checklist.enquiries ? 'checked' : ''} onchange="saveAdminChecklist('start', '${admin}')">
+                            <label for="start-enquiries-${admin}">Enquiry list reviewed</label>
+                        </div>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="start-followups-${admin}" ${checklist.followups ? 'checked' : ''} onchange="saveAdminChecklist('start', '${admin}')">
+                            <label for="start-followups-${admin}">Follow-up queue reviewed</label>
+                        </div>
+                        <p style="margin-top: 15px; color: var(--gray); font-size: 12px;">
+                            Completed at: <span id="start-completed-${admin}">${checklist.completed || 'Not completed'}</span>
+                        </p>
+                    </div>
+                `;
+            });
+
+            // END CHECKLISTS
+            const endChecklistDiv = document.getElementById('admin-checklists-end');
+            endChecklistDiv.innerHTML = '';
+            admins.forEach(admin => {
+                const checklistKey = `end-checklist-${admin}-${today}`;
+                const checklist = JSON.parse(localStorage.getItem(checklistKey) || '{"overdue":false,"priorities":false,"handover":false,"notes":"","completed":""}');
+
+                endChecklistDiv.innerHTML += `
+                    <div style="background-color: var(--light-gray); padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                        <h4>${admin}</h4>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="end-overdue-${admin}" ${checklist.overdue ? 'checked' : ''} onchange="saveAdminChecklist('end', '${admin}')">
+                            <label for="end-overdue-${admin}">Overdue follow-ups addressed or escalated</label>
+                        </div>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="end-priorities-${admin}" ${checklist.priorities ? 'checked' : ''} onchange="saveAdminChecklist('end', '${admin}')">
+                            <label for="end-priorities-${admin}">Tomorrow's priorities noted</label>
+                        </div>
+                        <div class="checklist-item">
+                            <input type="checkbox" id="end-handover-${admin}" ${checklist.handover ? 'checked' : ''} onchange="saveAdminChecklist('end', '${admin}')">
+                            <label for="end-handover-${admin}">Handover notes recorded</label>
+                        </div>
+                        <div class="form-group" style="margin-top: 15px;">
+                            <label>Handover Notes</label>
+                            <textarea id="end-notes-${admin}" onchange="saveAdminChecklist('end', '${admin}')">${checklist.notes}</textarea>
+                        </div>
+                        <p style="margin-top: 15px; color: var(--gray); font-size: 12px;">
+                            Completed at: <span id="end-completed-${admin}">${checklist.completed || 'Not completed'}</span>
+                        </p>
+                    </div>
+                `;
+            });
+
+            // Activity Summary
+            let enquiriesLogged = 0, callsLogged = 0, emailsLogged = 0, statusChanges = 0;
+
+            enquiries.forEach(e => {
+                if (e.created === today) enquiriesLogged++;
+                e.history.forEach(h => {
+                    if (h.date === today) {
+                        if (h.action === 'CALL') callsLogged++;
+                        else if (h.action === 'EMAIL') emailsLogged++;
+                        else if (h.action === 'STATUS CHANGE') statusChanges++;
+                    }
+                });
+            });
+
+            // Staff performance
+            const staffStats = {};
+            admins.forEach(staff => {
+                staffStats[staff] = { enquiries: 0, calls: 0, emails: 0, statusChanges: 0 };
+            });
+
+            enquiries.forEach(e => {
+                if (e.created === today && e.assignedTo) {
+                    staffStats[e.assignedTo].enquiries++;
+                }
+                e.history.forEach(h => {
+                    if (h.date === today && h.staff && staffStats[h.staff]) {
+                        if (h.action === 'CALL') staffStats[h.staff].calls++;
+                        else if (h.action === 'EMAIL') staffStats[h.staff].emails++;
+                        else if (h.action === 'STATUS CHANGE') staffStats[h.staff].statusChanges++;
+                    }
+                });
+            });
+
+            const perfTable = document.getElementById('staff-performance');
+            perfTable.innerHTML = '';
+            Object.entries(staffStats).forEach(([staff, stats]) => {
+                const row = perfTable.insertRow();
+                row.innerHTML = `
+                    <td>${staff}</td>
+                    <td>${stats.enquiries}</td>
+                    <td>${stats.calls}</td>
+                    <td>${stats.emails}</td>
+                    <td>${stats.statusChanges}</td>
+                `;
+            });
+        }
+
+        // SAVE ADMIN CHECKLIST
+        function saveAdminChecklist(type, admin) {
+            const today = new Date().toISOString().split('T')[0];
+            const currentTime = new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+
+            if (type === 'start') {
+                const checklistKey = `start-checklist-${admin}-${today}`;
+                const checklist = {
+                    email: document.getElementById(`start-email-${admin}`).checked,
+                    enquiries: document.getElementById(`start-enquiries-${admin}`).checked,
+                    followups: document.getElementById(`start-followups-${admin}`).checked,
+                    completed: ''
+                };
+
+                if (checklist.email && checklist.enquiries && checklist.followups) {
+                    checklist.completed = currentTime;
+                }
+
+                localStorage.setItem(checklistKey, JSON.stringify(checklist));
+                if (checklist.completed) {
+                    document.getElementById(`start-completed-${admin}`).textContent = checklist.completed;
+                }
+            } else if (type === 'end') {
+                const checklistKey = `end-checklist-${admin}-${today}`;
+                const checklist = {
+                    overdue: document.getElementById(`end-overdue-${admin}`).checked,
+                    priorities: document.getElementById(`end-priorities-${admin}`).checked,
+                    handover: document.getElementById(`end-handover-${admin}`).checked,
+                    notes: document.getElementById(`end-notes-${admin}`).value,
+                    completed: ''
+                };
+
+                if (checklist.overdue && checklist.priorities && checklist.handover) {
+                    checklist.completed = currentTime;
+                }
+
+                localStorage.setItem(checklistKey, JSON.stringify(checklist));
+                if (checklist.completed) {
+                    document.getElementById(`end-completed-${admin}`).textContent = checklist.completed;
+                }
+            }
+        }
+
+        // SWITCH TAB
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            const tabMap = {
+                'start-checklist': 0,
+                'end-checklist': 1,
+                'activity-summary': 2
+            };
+
+            document.querySelectorAll('.tab')[tabMap[tab]].classList.add('active');
+            document.getElementById(tab).classList.add('active');
+        }
+
+        // RENDER LEAD REPORT
+        function renderLeadReport() {
+            const tbody = document.getElementById('lead-report-body');
+            tbody.innerHTML = '';
+
+            const sources = ['Google', 'Meta', 'Website', 'Phone', 'Referral', 'Returning', 'Other'];
+            const stats = {};
+
+            sources.forEach(source => {
+                stats[source] = {
+                    total: 0,
+                    contacted: 0,
+                    qualified: 0,
+                    quotesBooked: 0,
+                    quotesCompleted: 0,
+                    jobsBooked: 0
+                };
+            });
+
+            enquiries.forEach(e => {
+                const source = e.source || 'Other';
+                if (stats[source]) {
+                    stats[source].total++;
+                    if (e.status !== 'NEW – NOT CONTACTED') stats[source].contacted++;
+                    if (e.status === 'QUALIFIED' || ['WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED', 'JOB BOOKED'].includes(e.status)) stats[source].qualified++;
+                    if (['QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED', 'JOB BOOKED'].includes(e.status)) stats[source].quotesBooked++;
+                    if (['QUOTE COMPLETED', 'JOB BOOKED'].includes(e.status)) stats[source].quotesCompleted++;
+                    if (e.status === 'JOB BOOKED') stats[source].jobsBooked++;
+                }
+            });
+
+            Object.entries(stats).forEach(([source, s]) => {
+                if (s.total > 0) {
+                    const row = tbody.insertRow();
+                    const leadQualPercent = ((s.qualified / s.total) * 100).toFixed(1);
+                    const quoteJobPercent = s.quotesCompleted > 0 ? ((s.jobsBooked / s.quotesCompleted) * 100).toFixed(1) : 0;
+                    const leadJobPercent = ((s.jobsBooked / s.total) * 100).toFixed(1);
+
+                    row.innerHTML = `
+                        <td>${source}</td>
+                        <td>${s.total}</td>
+                        <td>${s.contacted}</td>
+                        <td>${s.qualified}</td>
+                        <td>${s.quotesBooked}</td>
+                        <td>${s.quotesCompleted}</td>
+                        <td>${s.jobsBooked}</td>
+                        <td>${leadQualPercent}%</td>
+                        <td>${quoteJobPercent}%</td>
+                        <td>${leadJobPercent}%</td>
+                    `;
+                }
+            });
+        }
+
+        // UPDATE LEAD REPORT WITH DATES
+        function updateLeadReport() {
+            renderLeadReport();
+        }
+
+        // MODAL FUNCTIONS
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        // UTILITY: Get status badge class
+        function getStatusClass(status) {
+            const classMap = {
+                'NEW – NOT CONTACTED': 'status-new',
+                'CONTACTED': 'status-contacted',
+                'QUALIFIED': 'status-qualified',
+                'WAITING FOR PHOTOS': 'status-waiting-photos',
+                'WAITING FOR INFORMATION': 'status-waiting-info',
+                'FOLLOW-UP REQUIRED': 'status-followup',
+                'QUOTE APPOINTMENT BOOKED': 'status-quote-booked',
+                'QUOTE COMPLETED': 'status-quote-completed',
+                'JOB BOOKED': 'status-job-booked',
+                'COULD NOT CONTACT': 'status-could-not-contact',
+                'NOT PROCEEDING': 'status-not-proceeding',
+                'NOT SUITABLE': 'status-not-suitable',
+                'OUTSIDE SERVICE AREA': 'status-outside-area',
+                'ESCALATE TO MANAGER': 'status-escalate'
+            };
+            return classMap[status] || 'status-new';
+        }
+
+        // ===== SERVICEM8 API INTEGRATION =====
+        // This dashboard does NOT call ServiceM8 directly - a browser can't (CORS blocks it),
+        // and an API key must never sit in client-side code that gets shared as a link.
+        // Every request goes through the SuperSealed backend proxy, which holds the
+        // ServiceM8 API key server-side (see project-9jusa on Vercel).
+
+        const SERVICEM8_CONFIG = {
+            backendUrl: '',  // same-origin: this dashboard is served BY the backend now
+            syncInterval: 600000, // 10 minutes
+            syncWindowDays: 30,   // only pull jobs touched in the last N days - this is a live
+                                  // enquiry tracker, not a historical archive of every job ever created
+            lastSyncTime: null,
+            syncInProgress: false,
+            lastError: null
+        };
+
+        // Backend API helper - talks to our Vercel proxy, never to ServiceM8 directly
+        const ServiceM8API = {
+            async call(path) {
+                const url = `${SERVICEM8_CONFIG.backendUrl}${path}`;
+                console.log(`[ServiceM8] GET ${path}`);
+                const response = await fetch(url);
+                const result = await response.json();
+                if (!response.ok || result.status === 'error') {
+                    throw new Error(result.message || `Backend error: ${response.status}`);
+                }
+                return result;
+            },
+
+            async verify() {
+                try {
+                    const data = await this.call('/api/verify');
+                    return data.status === 'verified';
+                } catch (error) {
+                    console.error('[ServiceM8] Verify failed:', error);
+                    return false;
+                }
+            },
+
+            // Recently touched jobs only (avoids pulling years of historical archive)
+            async getRecentJobs(days) {
+                const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+                const cutoffStr = cutoff.toISOString().slice(0, 19).replace('T', ' ');
+                const filter = `edit_date gt '${cutoffStr}'`;
+                const data = await this.call(`/api/jobs?filter=${encodeURIComponent(filter)}`);
+                return data.jobs || [];
+            },
+
+            async getAllCompanies() {
+                const data = await this.call('/api/companies');
+                return data.companies || [];
+            },
+
+            async getAllJobContacts() {
+                const data = await this.call('/api/jobcontacts');
+                return data.contacts || [];
+            },
+
+            async updateJob(jobUuid, updates) {
+                const url = `${SERVICEM8_CONFIG.backendUrl}/api/jobs/${jobUuid}`;
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                const result = await response.json();
+                if (!response.ok || result.status === 'error') {
+                    throw new Error(result.message || `Backend error: ${response.status}`);
+                }
+                return result.job;
+            }
+        };
+
+        // Map a real ServiceM8 job status (text value) to a dashboard status
+        function mapJobStatusToDashboardStatus(jobStatus) {
+            switch (jobStatus) {
+                case 'Work Order': return 'JOB BOOKED';
+                case 'Completed': return 'JOB BOOKED';
+                case 'Unsuccessful': return 'NOT PROCEEDING';
+                case 'Quote':
+                default: return 'QUALIFIED';
+            }
+        }
+
+        // Data Mapping: ServiceM8 Job (+ Company + JobContact) -> Dashboard Enquiry
+        // Real ServiceM8 job.json records don't carry client name/phone/email directly -
+        // that lives on the linked Company and JobContact records, so we join them here.
+        function mapServiceM8JobToEnquiry(job, company, contact) {
+            const now = new Date();
+            const formattedDate = now.toISOString().split('T')[0];
+            const formattedTime = now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+
+            const firstLast = contact ? `${contact.first || ''} ${contact.last || ''}`.trim() : '';
+            const name = firstLast || (company && company.name) || 'Unknown Customer';
+            const phone = (contact && (contact.mobile || contact.phone)) || '';
+            const email = (contact && contact.email) || '';
+
+            // Try to pull a suburb out of the job address (format: "street, suburb, state postcode")
+            const addressParts = (job.job_address || '').split(',').map(p => p.trim()).filter(Boolean);
+            const suburb = addressParts.length > 1 ? addressParts[addressParts.length - 2] : (addressParts[0] || '');
+
+            const createdDate = (job.date || formattedDate).split(' ')[0];
+            const validQuoteDate = job.quote_date && job.quote_date !== '0000-00-00 00:00:00'
+                ? job.quote_date.split(' ')[0]
+                : '';
+
+            return {
+                id: `SVC-${job.uuid}`,
+                name: name,
+                phone: phone,
+                email: email,
+                suburb: suburb,
+                address: job.job_address || '',
+                service: 'Service Required',
+                source: 'ServiceM8',
+                description: job.job_description || '',
+                status: mapJobStatusToDashboardStatus(job.status),
+                assignedTo: '',
+                created: createdDate,
+                createdTime: formattedTime,
+                nextActionDue: job.status === 'Quote' ? createdDate : null,
+                nextActionType: job.status === 'Quote' ? 'FOLLOW-UP' : (job.status === 'Work Order' ? 'SCHEDULE APPOINTMENT' : ''),
+                servicem8Ref: job.uuid,
+                servicem8Status: job.status,
+                quoteDate: validQuoteDate,
+                quoteTime: '',
+                visitAddress: job.job_address || '',
+                quoteRef: job.generated_job_id || job.uuid,
+                history: [
+                    {
+                        date: formattedDate,
+                        time: formattedTime,
+                        staff: 'System',
+                        action: 'IMPORTED FROM SERVICEM8',
+                        notes: `Job imported from ServiceM8 (ID: ${job.uuid})`
+                    }
+                ]
+            };
+        }
+
+        // Data Mapping: Dashboard Enquiry -> ServiceM8 Job Update
+        // Only sends fields that actually exist on the ServiceM8 Job object (job_description,
+        // status). Customer contact details live on separate Company/JobContact records in
+        // ServiceM8 and are intentionally NOT pushed back from here, to avoid overwriting real
+        // client records with dashboard-only data.
+        function mapEnquiryToServiceM8Update(enquiry) {
+            const statusMap = {
+                'JOB BOOKED': 'Work Order',
+                'NOT PROCEEDING': 'Unsuccessful',
+                'QUALIFIED': 'Quote',
+                'QUOTE APPOINTMENT BOOKED': 'Quote',
+                'QUOTE COMPLETED': 'Completed'
+            };
+
+            const update = {};
+            if (enquiry.description) update.job_description = enquiry.description;
+            if (statusMap[enquiry.status]) update.status = statusMap[enquiry.status];
+            return update;
+        }
+
+        // Sync: fetch recently-touched jobs from ServiceM8 (via backend) and merge with local enquiries
+        async function syncServiceM8Jobs() {
+            if (SERVICEM8_CONFIG.syncInProgress) {
+                console.log('[ServiceM8Sync] Sync already in progress, skipping');
+                return;
+            }
+
+            SERVICEM8_CONFIG.syncInProgress = true;
+            SERVICEM8_CONFIG.lastError = null;
+            console.log('[ServiceM8Sync] Starting sync...');
+
+            try {
+                const connected = await ServiceM8API.verify();
+                if (!connected) {
+                    throw new Error('Backend could not verify the ServiceM8 connection');
+                }
+
+                // Pull the shared list first so we merge onto everyone's latest
+                // notes/statuses instead of clobbering them with a stale local copy.
+                await loadEnquiriesFromServer();
+
+                const [jobs, companies, contacts] = await Promise.all([
+                    ServiceM8API.getRecentJobs(SERVICEM8_CONFIG.syncWindowDays),
+                    ServiceM8API.getAllCompanies(),
+                    ServiceM8API.getAllJobContacts()
+                ]);
+
+                const companyMap = {};
+                companies.forEach(c => { companyMap[c.uuid] = c; });
+
+                const contactMap = {};
+                contacts.forEach(c => {
+                    if (!contactMap[c.job_uuid]) contactMap[c.job_uuid] = c; // first contact per job
+                });
+
+                console.log(`[ServiceM8Sync] Processing ${jobs.length} recently-touched jobs`);
+
+                let newEnquiries = 0;
+                let updatedEnquiries = 0;
+
+                for (const job of jobs) {
+                    const enquiryId = `SVC-${job.uuid}`;
+                    const existingEnquiry = enquiries.find(e => e.id === enquiryId);
+                    const company = companyMap[job.company_uuid];
+                    const contact = contactMap[job.uuid];
+
+                    if (!existingEnquiry) {
+                        enquiries.push(mapServiceM8JobToEnquiry(job, company, contact));
+                        newEnquiries++;
+                    } else if (existingEnquiry.servicem8Status !== job.status) {
+                        const updatedEnquiry = mapServiceM8JobToEnquiry(job, company, contact);
+
+                        // Preserve local history and staff assignment - don't clobber work already done in the dashboard
+                        updatedEnquiry.history = existingEnquiry.history || [];
+                        updatedEnquiry.assignedTo = existingEnquiry.assignedTo;
+
+                        updatedEnquiry.history.push({
+                            date: new Date().toISOString().split('T')[0],
+                            time: new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+                            staff: 'System',
+                            action: 'SERVICEM8 SYNC',
+                            notes: `ServiceM8 status changed: ${existingEnquiry.servicem8Status} -> ${job.status}`
+                        });
+
+                        const index = enquiries.findIndex(e => e.id === enquiryId);
+                        if (index !== -1) {
+                            enquiries[index] = updatedEnquiry;
+                            updatedEnquiries++;
+                        }
+                    }
+                }
+
+                saveEnquiriesToStorage();
+                updateDashboard();
+
+                SERVICEM8_CONFIG.lastSyncTime = new Date().toISOString();
+                console.log(`[ServiceM8Sync] Sync complete: ${newEnquiries} new, ${updatedEnquiries} updated`);
+
+            } catch (error) {
+                console.error('[ServiceM8Sync] Sync failed:', error);
+                SERVICEM8_CONFIG.lastError = error.message;
+            } finally {
+                SERVICEM8_CONFIG.syncInProgress = false;
+            }
+        }
+
+        // Push Enquiry Update to ServiceM8 (job_description/status only - see mapEnquiryToServiceM8Update)
+        async function pushEnquiryToServiceM8(enquiry) {
+            if (!enquiry.servicem8Ref) {
+                console.log('[ServiceM8Push] Enquiry has no ServiceM8 reference, skipping');
+                return false;
+            }
+
+            try {
+                const update = mapEnquiryToServiceM8Update(enquiry);
+                if (Object.keys(update).length === 0) {
+                    return false;
+                }
+                await ServiceM8API.updateJob(enquiry.servicem8Ref, update);
+                console.log(`[ServiceM8Push] Successfully pushed update to ServiceM8 for ${enquiry.id}`);
+                return true;
+            } catch (error) {
+                console.error('[ServiceM8Push] Push failed:', error);
+                return false;
+            }
+        }
+
+        // Update sync status display
+        function updateSyncStatusUI() {
+            const statusEl = document.getElementById('servicem8-status');
+            const lastSyncEl = document.getElementById('servicem8-last-sync');
+
+            if (!statusEl || !lastSyncEl) return; // Elements might not exist yet
+
+            if (SERVICEM8_CONFIG.syncInProgress) {
+                statusEl.textContent = 'Syncing...';
+                statusEl.style.color = '#ff9800';
+            } else if (SERVICEM8_CONFIG.lastError) {
+                statusEl.textContent = `Error - ${SERVICEM8_CONFIG.lastError}`;
+                statusEl.style.color = '#d32f2f';
+            } else if (SERVICEM8_CONFIG.lastSyncTime) {
+                statusEl.textContent = 'Connected';
+                statusEl.style.color = '#388e3c';
+                const syncDate = new Date(SERVICEM8_CONFIG.lastSyncTime);
+                const hours = syncDate.getHours().toString().padStart(2, '0');
+                const mins = syncDate.getMinutes().toString().padStart(2, '0');
+                lastSyncEl.textContent = `${hours}:${mins}`;
+            } else {
+                statusEl.textContent = 'Initializing...';
+                statusEl.style.color = '#666';
+            }
+        }
+
+        // Initialize periodic sync
+        function initServiceM8Sync() {
+            console.log('[ServiceM8] Initializing periodic sync...');
+
+            syncServiceM8Jobs().then(() => {
+                updateSyncStatusUI();
+            });
+
+            setInterval(() => {
+                updateSyncStatusUI();
+            }, 1000);
+
+            window.servicem8SyncInterval = setInterval(() => {
+                console.log('[ServiceM8] Running periodic sync...');
+                syncServiceM8Jobs().then(() => {
+                    updateSyncStatusUI();
+                });
+            }, SERVICEM8_CONFIG.syncInterval);
+        }
+
+        // Manual sync trigger (for UI)
+        function manualSyncServiceM8() {
+            console.log('[ServiceM8] Manual sync triggered');
+            syncServiceM8Jobs().then(() => {
+                updateSyncStatusUI();
+                if (SERVICEM8_CONFIG.lastError) {
+                    alert(`ServiceM8 sync failed: ${SERVICEM8_CONFIG.lastError}`);
+                } else {
+                    alert('ServiceM8 sync complete! Check the dashboard for updates.');
+                }
+            });
+        }
+
+        // ===== END SERVICEM8 INTEGRATION =====
+
+        // INITIALIZE
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Show something instantly from the local cache (or fake data on
+            // a brand new browser), then swap in the shared server copy the
+            // moment it arrives so everyone converges on the same data.
+            if (!loadEnquiriesFromStorage()) {
+                initializeFakeData();
+            } else {
+                updateDashboard();
+            }
+
+            const gotShared = await loadEnquiriesFromServer();
+            if (gotShared) {
+                updateDashboard();
+                if (typeof renderEnquiryList === 'function') { try { renderEnquiryList(); } catch (e) {} }
+            }
+
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('report-start-date').value = today;
+            document.getElementById('report-end-date').value = today;
+
+            // Initialize ServiceM8 sync
+            initServiceM8Sync();
+        });
+    </script>
+</body>
+</html>
