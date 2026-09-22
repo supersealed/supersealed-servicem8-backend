@@ -37,8 +37,7 @@ app.get('/api/verify', async (req, res) => {
     }
 
     // Make a simple API call to verify the connection
-    const response = await servicem8Client.get('/client.json?limit=1');
-    
+const response = await servicem8Client.get('/client');    
     res.json({
       status: 'verified',
       message: 'Successfully connected to ServiceM8 API',
