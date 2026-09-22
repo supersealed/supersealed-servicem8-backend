@@ -62,7 +62,12 @@ app.get('/api/jobs', async (req, res) => {
       });
     }
 
-  const response = await servicem8Client.get('/job.json');
+  let endpoint = '/job.json';
+    if (req.query.filter) {
+      endpoint += `?$filter=${encodeURIComponent(req.query.filter)}`;
+    }
+
+  const response = await servicem8Client.get(endpoint);
 
   res.json({
     status: 'success',
@@ -108,6 +113,99 @@ app.get('/api/jobs/:jobId', async (req, res) => {
     message: 'Failed to retrieve job from ServiceM8 API',
     error: error.message
   });
+  }
+});
+
+// Get all companies (clients) - used to resolve job contact/billing info
+app.get('/api/companies', async (req, res) => {
+  try {
+    if (!SERVICEM8_API_KEY) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'SERVICEM8_API_KEY environment variable is not set'
+      });
+    }
+
+  let endpoint = '/company.json';
+    if (req.query.filter) {
+      endpoint += `?$filter=${encodeURIComponent(req.query.filter)}`;
+    }
+
+  const response = await servicem8Client.get(endpoint);
+
+  res.json({
+    status: 'success',
+    count: response.data.length,
+    companies: response.data
+  });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve companies from ServiceM8 API',
+      error: error.message
+    });
+  }
+});
+
+// Get specific company by ID
+app.get('/api/companies/:companyId', async (req, res) => {
+  try {
+    if (!SERVICEM8_API_KEY) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'SERVICEM8_API_KEY environment variable is not set'
+      });
+    }
+
+  const { companyId } = req.params;
+    const response = await servicem8Client.get(`/company/${companyId}.json`);
+
+  res.json({
+    status: 'success',
+    company: response.data
+  });
+  } catch (error) {
+    if (error.response?.status === 404) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Company not found'
+      });
+    }
+
+  res.status(500).json({
+    status: 'error',
+    message: 'Failed to retrieve company from ServiceM8 API',
+    error: error.message
+  });
+  }
+});
+
+// Get job contacts for a specific job (name/phone/email for that job)
+app.get('/api/jobcontacts/:jobId', async (req, res) => {
+  try {
+    if (!SERVICEM8_API_KEY) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'SERVICEM8_API_KEY environment variable is not set'
+      });
+    }
+
+  const { jobId } = req.params;
+    const filterVal = `job_uuid eq '${jobId}'`;
+    const endpoint = `/jobcontact.json?$filter=${encodeURIComponent(filterVal)}`;
+    const response = await servicem8Client.get(endpoint);
+
+  res.json({
+    status: 'success',
+    count: response.data.length,
+    contacts: response.data
+  });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve job contacts from ServiceM8 API',
+      error: error.message
+    });
   }
 });
 
