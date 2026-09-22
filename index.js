@@ -181,6 +181,33 @@ app.get('/api/companies/:companyId', async (req, res) => {
     }
 });
 
+// Get all badges (read-only) - used to resolve the UUIDs in a job's
+// "badges" field to their names (e.g. lead-source badges like "Google Ads").
+app.get('/api/badges', async (req, res) => {
+    try {
+          if (!SERVICEM8_API_KEY) {
+                  return res.status(400).json({
+                            status: 'error',
+                            message: 'SERVICEM8_API_KEY environment variable is not set'
+                  });
+          }
+
+    const response = await servicem8Client.get('/badge.json');
+
+    res.json({
+          status: 'success',
+          count: response.data.length,
+          badges: response.data
+    });
+    } catch (error) {
+          res.status(500).json({
+                  status: 'error',
+                  message: 'Failed to retrieve badges from ServiceM8 API',
+                  error: error.message
+          });
+    }
+});
+
 // Get all job contacts (optional ?filter=) - bulk fetch, used to join name/phone/email onto jobs
 app.get('/api/jobcontacts', async (req, res) => {
     try {
