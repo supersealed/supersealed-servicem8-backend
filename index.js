@@ -160,7 +160,5 @@ app.use((err, req, res, next) => {
 
 // Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`SuperSealed ServiceM8 Backend running on port ${PORT}`);
-  console.log(`API Base URL: ${SERVICEM8_BASE_URL}`);
-});
+// Export app for Vercel serverless
+module.exports = app;
