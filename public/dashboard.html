@@ -1409,10 +1409,15 @@
                 <!-- FOLLOW-UP QUEUE PAGE -->
                 <div class="page" id="followup-queue-page">
                     <div class="card">
-                        <h2>Follow-Up Queue (Sorted by Urgency)</h2>
+                        <h2>Follow-Up Queue (Newest First)</h2>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                            <span id="followup-selected-count" style="color: var(--gray); font-size: 13px;">Select rows to remove them from this queue.</span>
+                            <button class="btn btn-secondary btn-small" onclick="removeSelectedFollowups()">🗑️ Remove Selected from Queue</button>
+                        </div>
                         <table>
                             <thead>
                                 <tr>
+                                    <th style="width: 30px;"><input type="checkbox" id="followup-select-all" onchange="toggleAllFollowupSelection(this)"></th>
                                     <th>Customer</th>
                                     <th>Status</th>
                                     <th>Next Action</th>
@@ -2118,8 +2123,8 @@
                 if (e.status === 'QUALIFIED') qualified++;
                 if (e.status === 'QUOTE APPOINTMENT BOOKED') quotesBooked++;
                 if (e.status === 'WAITING FOR PHOTOS') waitingPhotos++;
-                if (e.nextActionDue === today && ['NEW – NOT CONTACTED', 'CONTACTED', 'QUALIFIED', 'WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED'].includes(e.status)) followupToday++;
-                if (e.nextActionDue && e.nextActionDue < today && ['NEW – NOT CONTACTED', 'CONTACTED', 'QUALIFIED', 'WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED'].includes(e.status)) overdue++;
+                if (!e.followupDismissed && e.nextActionDue === today && ['NEW – NOT CONTACTED', 'CONTACTED', 'QUALIFIED', 'WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED'].includes(e.status)) followupToday++;
+                if (!e.followupDismissed && e.nextActionDue && e.nextActionDue < today && ['NEW – NOT CONTACTED', 'CONTACTED', 'QUALIFIED', 'WAITING FOR PHOTOS', 'WAITING FOR INFORMATION', 'FOLLOW-UP REQUIRED', 'QUOTE APPOINTMENT BOOKED', 'QUOTE COMPLETED'].includes(e.status)) overdue++;
                 if (e.status === 'ESCALATE TO MANAGER') escalations++;
                 if (e.approvedDate === today) approvedToday++;
             });
@@ -2646,20 +2651,19 @@
             const tbody = document.getElementById('followup-body');
             tbody.innerHTML = '';
 
+            // Newest first: today (and anything due soon) at the top, then
+            // walking backwards through overdue days, oldest at the bottom -
+            // the opposite of the old oldest-overdue-first ordering.
             enquiries
-                .filter(e => e.nextActionDue)
-                .sort((a, b) => {
-                    const aOverdue = a.nextActionDue < today ? -1 : (a.nextActionDue === today ? 0 : 1);
-                    const bOverdue = b.nextActionDue < today ? -1 : (b.nextActionDue === today ? 0 : 1);
-                    if (aOverdue !== bOverdue) return aOverdue - bOverdue;
-                    return new Date(a.nextActionDue) - new Date(b.nextActionDue);
-                })
+                .filter(e => e.nextActionDue && !e.followupDismissed)
+                .sort((a, b) => new Date(b.nextActionDue) - new Date(a.nextActionDue))
                 .forEach(e => {
                     const row = tbody.insertRow();
                     const daysOverdue = (new Date(today) - new Date(e.nextActionDue)) / (1000 * 60 * 60 * 24);
                     const overdueText = daysOverdue > 0 ? `${Math.floor(daysOverdue)} days` : (daysOverdue === 0 ? 'Today' : 'Due soon');
 
                     row.innerHTML = `
+                        <td><input type="checkbox" class="followup-select" data-id="${e.id}" onchange="updateFollowupSelectionCount()"></td>
                         <td onclick="viewEnquiry('${e.id}')" style="cursor: pointer;">${e.name}</td>
                         <td onclick="viewEnquiry('${e.id}')" style="cursor: pointer;"><span class="status-badge ${getStatusClass(e.status)}">${e.status.substring(0, 15)}</span></td>
                         <td onclick="viewEnquiry('${e.id}')" style="cursor: pointer;">${e.nextActionType}</td>
@@ -2670,6 +2674,52 @@
                         </td>
                     `;
                 });
+
+            const selectAll = document.getElementById('followup-select-all');
+            if (selectAll) selectAll.checked = false;
+            updateFollowupSelectionCount();
+        }
+
+        // FOLLOW-UP QUEUE SELECTION - lets an admin tick a batch of rows and
+        // clear them out of the queue in one click, instead of one at a time.
+        function toggleAllFollowupSelection(checkbox) {
+            document.querySelectorAll('.followup-select').forEach(cb => { cb.checked = checkbox.checked; });
+            updateFollowupSelectionCount();
+        }
+
+        function updateFollowupSelectionCount() {
+            const boxes = document.querySelectorAll('.followup-select');
+            const checked = document.querySelectorAll('.followup-select:checked');
+            const label = document.getElementById('followup-selected-count');
+            if (label) {
+                label.textContent = checked.length > 0
+                    ? `${checked.length} selected`
+                    : 'Select rows to remove them from this queue.';
+            }
+            const selectAll = document.getElementById('followup-select-all');
+            if (selectAll) selectAll.checked = boxes.length > 0 && checked.length === boxes.length;
+        }
+
+        // Removing here only clears the item from the Follow-Up Queue view -
+        // it does NOT delete the enquiry. Its full record, notes and history
+        // stay exactly as they are in the Enquiry List, and this stays
+        // cleared even after the next ServiceM8 sync.
+        function removeSelectedFollowups() {
+            const checked = Array.from(document.querySelectorAll('.followup-select:checked'));
+            if (checked.length === 0) {
+                alert('Tick at least one row first.');
+                return;
+            }
+            if (!confirm(`Remove ${checked.length} item(s) from the Follow-Up Queue? They'll still be in the Enquiry List with all their notes - this just clears them from this queue.`)) {
+                return;
+            }
+            const idsToRemove = new Set(checked.map(cb => cb.dataset.id));
+            enquiries.forEach(e => {
+                if (idsToRemove.has(e.id)) e.followupDismissed = true;
+            });
+            saveEnquiriesToStorage();
+            renderFollowupQueue();
+            updateDashboard();
         }
 
         // RENDER ESCALATIONS
@@ -3251,6 +3301,10 @@
                 createdTime: formattedTime,
                 nextActionDue: job.status === 'Quote' ? (validQuoteDate || createdDate) : null,
                 nextActionType: job.status === 'Quote' ? (validQuoteDate ? 'QUOTE APPOINTMENT' : 'FOLLOW-UP') : (job.status === 'Work Order' ? 'SCHEDULE APPOINTMENT' : ''),
+                // Set only when someone removes this item from the Follow-Up
+                // Queue view - preserved across syncs (below) so it doesn't
+                // silently reappear next time ServiceM8 pushes an update.
+                followupDismissed: false,
                 servicem8Ref: job.uuid,
                 // Raw badges JSON as last seen from ServiceM8 - lets the sync loop detect
                 // a badge change (e.g. staff clicking a lead-source badge) even when the
@@ -3352,9 +3406,11 @@
                         // Lead Source on the next sync, not just on status transitions.
                         const updatedEnquiry = mapServiceM8JobToEnquiry(job, company, contact);
 
-                        // Preserve local history and staff assignment - don't clobber work already done in the dashboard
+                        // Preserve local history, staff assignment and follow-up
+                        // dismissal - don't clobber work already done in the dashboard
                         updatedEnquiry.history = existingEnquiry.history || [];
                         updatedEnquiry.assignedTo = existingEnquiry.assignedTo;
+                        updatedEnquiry.followupDismissed = existingEnquiry.followupDismissed || false;
 
                         // Jobs Approved Today: stamp the date the very first time we see this
                         // job cross Quote -> Work Order, and carry that date forward on every
