@@ -58,7 +58,7 @@
   }
   function driveMins(d) { return Math.round(d * 1.6 + 5); } // rough Melbourne estimate
   function suburbOf(job) { return job.suburb || (job.address || '').split(',').slice(-2, -1)[0] || job.address || 'job'; }
-  function staffName(s) { return s.first || s.name || 'Staff'; }
+  function staffName(s) { var n = (s.first || s.name || 'Staff').trim(); return n.charAt(0).toUpperCase() + n.slice(1); }
   function isInspector(s) { return CFG.inspectionStaff.indexOf((s.first || '').trim().toLowerCase()) >= 0; }
 
   function pointInRing(pt, ring) {
@@ -118,6 +118,12 @@
       '#bm-root .bm-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}' +
       '#bm-root .bm-chip{min-height:40px;padding:0 14px;border-radius:20px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px}' +
       '#bm-root .bm-link{border:0;background:none;color:#0B6E6A;font-weight:700;text-decoration:underline;cursor:pointer;font-size:14px}' +
+      '#bm-root .bm-cal{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}' +
+      '#bm-root .bm-cal .hd{font-size:13px;font-weight:800;color:#4A5B67;text-align:center;padding:2px 0}' +
+      '#bm-root .bm-cal button{min-height:74px;border-radius:10px;border:1px solid #DDE3E8;background:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;padding:8px 10px;text-align:left;color:#13212B}' +
+      '#bm-root .bm-cal button b{font-size:18px}#bm-root .bm-cal button span{font-size:12px;font-weight:700}' +
+      '#bm-root .bm-cal button.sel{outline:3px solid #0E2A3B;outline-offset:1px}' +
+      '#bm-root .bm-cal button:disabled{opacity:.35;cursor:default}' +
       '#bm-map{height:720px;border-radius:12px;border:1px solid #C9D3D9;overflow:hidden}' + '#bm-root .bm-3d{min-height:46px;padding:0 16px;border-radius:10px;border:2px solid #0E2A3B;background:#0E2A3B;color:#fff;font-weight:800;cursor:pointer}' +
       '#bm-root .bm-run{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin-top:12px}' +
       '#bm-root .bm-runitem{display:flex;gap:10px;align-items:center;border:1px solid #DDE3E8;border-radius:10px;padding:9px 12px;font-size:13px}' +
@@ -161,6 +167,11 @@
       '<div class="bm-step"><button id="bm-dn" aria-label="One day less">−</button><div id="bm-nd"></div><button id="bm-up" aria-label="One day more">+</button></div></div>' +
       '</div>' +
       '<div><div class="bm-h" style="font-size:19px" id="bm-title">Options</div><div id="bm-status"></div><div class="bm-cards" id="bm-cards"></div></div>' +
+      '<div class="bm-card"><div class="bm-maphead"><span class="bm-h" style="margin:0;font-size:19px">Calendar</span><span style="flex:1"></span>' +
+      '<button class="bm-arrow" id="bm-cprev" aria-label="Previous month">‹</button><span class="bm-day" id="bm-cmonth"></span>' +
+      '<button class="bm-arrow" id="bm-cnext" aria-label="Next month">›</button></div>' +
+      '<div class="bm-note" id="bm-ckey" style="margin:0 0 10px"></div>' +
+      '<div class="bm-cal" id="bm-cal"></div></div>' +
       '<div class="bm-card">' +
       '<div class="bm-maphead"><span class="bm-h" style="margin:0;font-size:19px">Map</span><span style="flex:1"></span>' +
       '<button class="bm-arrow" id="bm-prev" aria-label="Previous day">‹</button><span class="bm-day" id="bm-day"></span>' +
@@ -182,6 +193,8 @@
     el('bm-prev').onclick = function () { S.dayIdx = Math.max(0, S.dayIdx - 1); renderMap(); };
     el('bm-next').onclick = function () { S.dayIdx = Math.min(S.days.length - 1, S.dayIdx + 1); renderMap(); };
     el('bm-3d').onclick = function () { set3d(S.is3d === false); };
+    el('bm-cprev').onclick = function () { S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth() - 1, 1); renderCal(); };
+    el('bm-cnext').onclick = function () { S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth() + 1, 1); renderCal(); };
   }
 
   // ---------- address search (Photon / OpenStreetMap) ----------
@@ -295,7 +308,7 @@
 
   // ---------- the brains ----------
   function compute() {
-    S.opts = [];
+    S.opts = []; S.dayBest = {}; S.dayRun = {};
     if (!S.loaded || !S.client) return;
     var c = S.client, visible = S.staff.filter(function (s) { return !S.hidden[s.uuid]; });
     if (S.mode === 'quote') {
@@ -321,12 +334,18 @@
           if (best) opts.push({ staff: s, dayIdx: di, slot: best.start, dist: best.dist, from: best.from, score: best.dist + di * 0.12 });
         });
       });
+      opts.forEach(function (o) { var cur = S.dayBest[o.dayIdx]; if (!cur || o.dist < cur.dist) S.dayBest[o.dayIdx] = o; });
       opts.sort(function (a, b) { return a.score - b.score; });
       var seen = {};
       S.opts = opts.filter(function (o) { var k = o.dayIdx + '|' + o.staff.uuid; if (seen[k]) return false; seen[k] = 1; return true; }).slice(0, 3);
     } else {
       var n = S.ndays, out = [];
       visible.filter(function (s) { return !s.inspector; }).forEach(function (s) {
+        for (var ci = 0; ci + n <= S.days.length; ci++) {
+          var okc = true;
+          for (var kc = 0; kc < n; kc++) if (dayActs(s.uuid, ci + kc).length) { okc = false; break; }
+          if (okc) (S.dayRun[ci] = S.dayRun[ci] || []).push(staffName(s));
+        }
         var found = 0;
         for (var i = 0; i + n <= S.days.length && found < 2; i++) {
           var ok = true;
@@ -413,6 +432,7 @@
     var none = document.createElement('button'); none.className = 'bm-link'; none.textContent = 'None';
     none.onclick = function () { S.staff.forEach(function (s) { S.hidden[s.uuid] = true; }); compute(); render(); renderMap(); };
     chips.appendChild(all); chips.appendChild(none);
+    renderCal();
   }
 
   var REGION_LABELS = { 'North': [145.02, -37.52], 'East': [145.33, -37.80], 'South East': [145.24, -38.02], 'West': [144.74, -37.78], 'Peninsula': [145.10, -38.25], 'Inner': [144.985, -37.835] };
@@ -485,9 +505,55 @@
     S.markers.push(m);
   }
 
+  function renderCal() {
+    if (!el('bm-cal')) return;
+    if (!S.calMonth) { var t = new Date(); S.calMonth = new Date(t.getFullYear(), t.getMonth(), 1); }
+    var m = S.calMonth, idx = {};
+    S.days.forEach(function (d, i) { idx[ymd(d)] = i; });
+    var first = S.days[0], last = S.days[S.days.length - 1];
+    el('bm-cmonth').textContent = MONL[m.getMonth()] + ' ' + m.getFullYear();
+    el('bm-cprev').disabled = !first || (m.getFullYear() * 12 + m.getMonth()) <= (first.getFullYear() * 12 + first.getMonth());
+    el('bm-cnext').disabled = !last || (m.getFullYear() * 12 + m.getMonth()) >= (last.getFullYear() * 12 + last.getMonth());
+    el('bm-ckey').textContent = !S.client ? 'Number of bookings each day. Type a client address to see the best days.'
+      : S.mode === 'quote' ? 'Green = inspector very close and free · Amber = close · Grey = further away · White = no free inspection slot'
+      : 'Green = a technician is free for ' + S.ndays + ' day' + (S.ndays > 1 ? 's in a row' : '') + ' starting that day';
+    var cal = el('bm-cal'); cal.innerHTML = '';
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].forEach(function (h) { var d = document.createElement('div'); d.className = 'hd'; d.textContent = h; cal.appendChild(d); });
+    var d1 = new Date(m.getFullYear(), m.getMonth(), 1), pad0 = (d1.getDay() + 6) % 7; // Mon=0
+    for (var p = 0; p < Math.min(pad0, 5); p++) cal.appendChild(document.createElement('div'));
+    var visible = S.staff.filter(function (s) { return !S.hidden[s.uuid]; });
+    for (var day = 1; day <= 31; day++) {
+      var dt = new Date(m.getFullYear(), m.getMonth(), day);
+      if (dt.getMonth() !== m.getMonth()) break;
+      if (dt.getDay() === 0 || dt.getDay() === 6) continue;
+      var b = document.createElement('button'), di = idx[ymd(dt)], label = '', bg = '#fff', fg = '#4A5B67';
+      if (di === undefined) { b.disabled = true; }
+      else if (!S.client) {
+        var n = 0; visible.forEach(function (s) { n += dayActs(s.uuid, di).length; });
+        label = n + (n === 1 ? ' booking' : ' bookings');
+      } else if (S.mode === 'quote') {
+        var o = S.dayBest[di];
+        if (!o) { label = 'Full'; }
+        else if (o.dist <= 5) { label = 'Very close · ' + staffName(o.staff); bg = '#2E9E66'; fg = '#fff'; }
+        else if (o.dist <= 12) { label = 'Close · ' + staffName(o.staff); bg = '#F2B544'; fg = '#13212B'; }
+        else { label = 'Far · ' + staffName(o.staff); bg = '#EEF1F3'; fg = '#4A5B67'; }
+      } else {
+        var r = S.dayRun[di];
+        if (r && r.length) { label = 'Free: ' + r.join(', '); bg = '#2E9E66'; fg = '#fff'; } else { label = '—'; }
+      }
+      b.style.background = bg; b.style.color = fg;
+      b.innerHTML = '<b>' + day + '</b><span>' + esc(label) + '</span>';
+      b.setAttribute('aria-label', dLong(dt) + (label ? ': ' + label : ''));
+      if (di === S.dayIdx) b.className = 'sel';
+      if (di !== undefined) (function (i) { b.onclick = function () { S.dayIdx = i; renderCal(); renderMap(true); el('bm-map').scrollIntoView({ behavior: 'smooth', block: 'center' }); }; })(di);
+      cal.appendChild(b);
+    }
+  }
+
   function renderMap(fit) {
     if (!S.days.length) { if (el('bm-day')) el('bm-day').textContent = ''; return; }
     el('bm-day').textContent = dLong(S.days[S.dayIdx]);
+    if (S.days[S.dayIdx]) { var dd = S.days[S.dayIdx]; if (!S.calMonth || S.calMonth.getMonth() !== dd.getMonth() || S.calMonth.getFullYear() !== dd.getFullYear()) S.calMonth = new Date(dd.getFullYear(), dd.getMonth(), 1); renderCal(); }
     var run = el('bm-run'); run.innerHTML = '';
     var lines = [], pts = [];
     if (S.map && S.markers) { S.markers.forEach(function (m) { m.remove(); }); S.markers = []; }
