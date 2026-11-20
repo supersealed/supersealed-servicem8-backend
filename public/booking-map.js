@@ -118,7 +118,7 @@
       '#bm-root .bm-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}' +
       '#bm-root .bm-chip{min-height:40px;padding:0 14px;border-radius:20px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px}' +
       '#bm-root .bm-link{border:0;background:none;color:#0B6E6A;font-weight:700;text-decoration:underline;cursor:pointer;font-size:14px}' +
-      '#bm-map{height:640px;border-radius:12px;border:1px solid #C9D3D9}' +
+      '#bm-map{height:720px;border-radius:12px;border:1px solid #C9D3D9;overflow:hidden}' + '#bm-root .bm-3d{min-height:46px;padding:0 16px;border-radius:10px;border:2px solid #0E2A3B;background:#0E2A3B;color:#fff;font-weight:800;cursor:pointer}' +
       '#bm-root .bm-run{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin-top:12px}' +
       '#bm-root .bm-runitem{display:flex;gap:10px;align-items:center;border:1px solid #DDE3E8;border-radius:10px;padding:9px 12px;font-size:13px}' +
       '#bm-root .bm-runitem.free{border:2px dashed #3CA571;background:#F2FBF6}' +
@@ -135,11 +135,11 @@
     var s = document.createElement('style'); s.id = 'bm-style'; s.textContent = css; document.head.appendChild(s);
   }
 
-  function loadLeaflet() {
+  function loadMapLib() {
     return new Promise(function (resolve, reject) {
-      if (window.L) return resolve();
-      var c = document.createElement('link'); c.rel = 'stylesheet'; c.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(c);
-      var s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      if (window.maplibregl) return resolve();
+      var c = document.createElement('link'); c.rel = 'stylesheet'; c.href = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css'; document.head.appendChild(c);
+      var s = document.createElement('script'); s.src = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
       s.onload = function () { resolve(); }; s.onerror = function () { reject(new Error('Could not load the map library')); };
       document.head.appendChild(s);
     });
@@ -164,7 +164,7 @@
       '<div class="bm-card">' +
       '<div class="bm-maphead"><span class="bm-h" style="margin:0;font-size:19px">Map</span><span style="flex:1"></span>' +
       '<button class="bm-arrow" id="bm-prev" aria-label="Previous day">‹</button><span class="bm-day" id="bm-day"></span>' +
-      '<button class="bm-arrow" id="bm-next" aria-label="Next day">›</button></div>' +
+      '<button class="bm-arrow" id="bm-next" aria-label="Next day">›</button><button class="bm-3d" id="bm-3d">2D view</button></div>' +
       '<div class="bm-chips" id="bm-chips"></div>' +
       '<div id="bm-map"></div>' +
       '<div class="bm-run" id="bm-run"></div>' +
@@ -181,6 +181,7 @@
     el('bm-up').onclick = function () { S.ndays = Math.min(15, S.ndays + 1); S.sel = 0; compute(); render(); };
     el('bm-prev').onclick = function () { S.dayIdx = Math.max(0, S.dayIdx - 1); renderMap(); };
     el('bm-next').onclick = function () { S.dayIdx = Math.min(S.days.length - 1, S.dayIdx + 1); renderMap(); };
+    el('bm-3d').onclick = function () { set3d(S.is3d === false); };
   }
 
   // ---------- address search (Photon / OpenStreetMap) ----------
@@ -414,41 +415,82 @@
     chips.appendChild(all); chips.appendChild(none);
   }
 
+  var REGION_LABELS = { 'North': [145.02, -37.52], 'East': [145.33, -37.80], 'South East': [145.24, -38.02], 'West': [144.74, -37.78], 'Peninsula': [145.10, -38.25], 'Inner': [144.985, -37.835] };
+
   function drawRegions() {
-    if (!S.map || !S.regions || S.regionsDrawn) return;
+    if (!S.map || !S.mapReady || !S.regions || S.regionsDrawn) return;
     S.regionsDrawn = true;
-      L.geoJSON(S.regions, {
-        interactive: false,
-        style: function (f) { var c = REGION_STYLE[f.properties.region] || '#999'; return { color: c, weight: 2, fillColor: c, fillOpacity: 0.12 }; }
-      }).addTo(S.map);
-      var labels = { 'North': [-37.52, 145.02], 'East': [-37.80, 145.33], 'South East': [-38.02, 145.24], 'West': [-37.78, 144.74], 'Peninsula': [-38.25, 145.10], 'Inner': [-37.835, 144.985] };
-      Object.keys(labels).forEach(function (k) {
-        L.marker(labels[k], { interactive: false, icon: L.divIcon({ className: '', html: '<div class="bm-region">' + k.toUpperCase() + '</div>', iconSize: [120, 16], iconAnchor: [60, 8] }) }).addTo(S.map);
-      });
-    }
+    var colorExpr = ['match', ['get', 'region']];
+    Object.keys(REGION_STYLE).forEach(function (k) { colorExpr.push(k, REGION_STYLE[k]); });
+    colorExpr.push('#999999');
+    // put zone colours under the street names and 3D buildings
+    var firstSymbol = (S.map.getStyle().layers || []).filter(function (l) { return l.type === 'symbol'; })[0];
+    var before = firstSymbol ? firstSymbol.id : undefined;
+    S.map.addSource('bm-regions', { type: 'geojson', data: S.regions });
+    S.map.addLayer({ id: 'bm-regions-fill', type: 'fill', source: 'bm-regions', paint: { 'fill-color': colorExpr, 'fill-opacity': 0.22 } }, before);
+    S.map.addLayer({ id: 'bm-regions-line', type: 'line', source: 'bm-regions', paint: { 'line-color': colorExpr, 'line-width': 3, 'line-opacity': 0.9 } }, before);
+    var pts = { type: 'FeatureCollection', features: Object.keys(REGION_LABELS).map(function (k) {
+      return { type: 'Feature', properties: { name: k.toUpperCase() }, geometry: { type: 'Point', coordinates: REGION_LABELS[k] } };
+    }) };
+    S.map.addSource('bm-region-names', { type: 'geojson', data: pts });
+    if (S.map.getStyle().glyphs) S.map.addLayer({ id: 'bm-region-names', type: 'symbol', source: 'bm-region-names', maxzoom: 12,
+      layout: { 'text-field': ['get', 'name'], 'text-size': 22, 'text-letter-spacing': 0.25, 'text-font': ['Noto Sans Bold'], 'text-allow-overlap': true },
+      paint: { 'text-color': '#0E2A3B', 'text-opacity': 0.55, 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
+  }
+
+  function makeSuburbLabelsBigger() {
+    // Make suburb / town names larger and bolder so they read at a glance
+    (S.map.getStyle().layers || []).forEach(function (l) {
+      if (l.type !== 'symbol' || !/place|label_(city|town|village|other)|suburb|locality/i.test(l.id)) return;
+      try {
+        S.map.setPaintProperty(l.id, 'text-color', '#13212B');
+        S.map.setPaintProperty(l.id, 'text-halo-color', '#ffffff');
+        S.map.setPaintProperty(l.id, 'text-halo-width', 2);
+        var size = S.map.getLayoutProperty(l.id, 'text-size');
+        if (typeof size === 'number') S.map.setLayoutProperty(l.id, 'text-size', size * 1.3);
+      } catch (e) { /* layer without text */ }
+    });
+  }
 
   function initMap() {
-    if (S.map || !window.L) return;
-    S.map = L.map('bm-map', { zoomControl: true }).setView([-37.85, 145.02], 10);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 18, subdomains: 'abcd',
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
-    }).addTo(S.map);
-    drawRegions();
-    var Compass = L.Control.extend({ onAdd: function () {
-      var d = L.DomUtil.create('div', 'bm-compass');
-      d.innerHTML = '<svg width="50" height="50" viewBox="0 0 100 100" role="img" aria-label="North is up"><polygon points="50,14 58,50 42,50" fill="#E11D48"/><polygon points="50,86 58,50 42,50" fill="#0E2A3B"/><text x="50" y="12" text-anchor="middle" font-size="16" font-weight="800" fill="#E11D48" font-family="Arial">N</text></svg>';
-      return d;
-    } });
-    new Compass({ position: 'topright' }).addTo(S.map);
-    S.layer = L.layerGroup().addTo(S.map);
+    if (S.map || !window.maplibregl) return;
+    S.map = new maplibregl.Map({
+      container: 'bm-map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [145.02, -37.86], zoom: 9.6, pitch: 50, bearing: -10, maxPitch: 70,
+      attributionControl: { compact: true }
+    });
+    S.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true }), 'top-right');
+    S.map.on('load', function () {
+      S.map.addSource('bm-routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      S.map.addLayer({ id: 'bm-routes', type: 'line', source: 'bm-routes', layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': 0.85 } });
+      S.mapReady = true;
+      try { makeSuburbLabelsBigger(); } catch (e) { console.warn('[BookingMap] labels', e); }
+      try { drawRegions(); } catch (e) { console.warn('[BookingMap] regions', e); }
+      renderMap(true);
+    });
+    S.markers = [];
+  }
+
+  function set3d(on) {
+    S.is3d = on;
+    if (S.map) S.map.easeTo({ pitch: on ? 55 : 0, bearing: on ? -10 : 0, duration: 700 });
+    if (el('bm-3d')) el('bm-3d').textContent = on ? '2D view' : '3D view';
+  }
+
+  function addMarker(lng, lat, html, z) {
+    var d = document.createElement('div'); d.innerHTML = html; d.style.zIndex = z || 1;
+    var m = new maplibregl.Marker({ element: d, anchor: 'left', offset: [-13, 0] }).setLngLat([lng, lat]).addTo(S.map);
+    S.markers.push(m);
   }
 
   function renderMap(fit) {
-    if (!S.map || !S.days.length) { if (el('bm-day')) el('bm-day').textContent = ''; return; }
+    if (!S.days.length) { if (el('bm-day')) el('bm-day').textContent = ''; return; }
     el('bm-day').textContent = dLong(S.days[S.dayIdx]);
-    S.layer.clearLayers();
-    var pts = [], run = el('bm-run'); run.innerHTML = '';
+    var run = el('bm-run'); run.innerHTML = '';
+    var lines = [], pts = [];
+    if (S.map && S.markers) { S.markers.forEach(function (m) { m.remove(); }); S.markers = []; }
     S.staff.forEach(function (s) {
       if (S.hidden[s.uuid]) return;
       var acts = dayActs(s.uuid, S.dayIdx), line = [];
@@ -458,25 +500,28 @@
         item.innerHTML = '<span class="bm-num" style="background:' + s.color + '">' + (i + 1) + '</span><div><b>' + esc(staffName(s)) + ' · ' + hm(a.start) + '–' + hm(a.end) + '</b><br>' + esc(suburbOf(j)) + (p ? '' : ' (no map location)') + '</div>';
         run.appendChild(item);
         if (!p) return;
-        line.push([p.lat, p.lng]); pts.push([p.lat, p.lng]);
-        L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', iconSize: [0, 0], iconAnchor: [13, 13],
-          html: '<div class="bm-pin"><b style="background:' + s.color + '">' + (i + 1) + '</b><span>' + esc(staffName(s)) + ' · ' + hm(a.start) + ' · ' + esc(suburbOf(j)) + '</span></div>' }) }).addTo(S.layer);
+        line.push([p.lng, p.lat]); pts.push([p.lng, p.lat]);
+        if (S.mapReady) addMarker(p.lng, p.lat, '<div class="bm-pin"><b style="background:' + s.color + '">' + (i + 1) + '</b><span>' + esc(staffName(s)) + ' · ' + hm(a.start) + ' · ' + esc(suburbOf(j)) + '</span></div>', 2);
       });
-      if (line.length > 1) L.polyline(line, { color: s.color, weight: 4, opacity: 0.8 }).addTo(S.layer);
+      if (line.length > 1) lines.push({ type: 'Feature', properties: { color: s.color }, geometry: { type: 'LineString', coordinates: line } });
       freeGaps(acts).forEach(function (g) {
         var item = document.createElement('div'); item.className = 'bm-runitem free';
         item.innerHTML = '<span class="bm-num" style="background:#fff;border:2px dashed ' + s.color + '"></span><div><b>' + esc(staffName(s)) + ' · FREE ' + (acts.length ? hm(g[0]) + '–' + hm(g[1]) : 'ALL DAY') + '</b><br>Available to book</div>';
         run.appendChild(item);
       });
     });
+    if (!S.mapReady) return;
+    S.map.getSource('bm-routes').setData({ type: 'FeatureCollection', features: lines });
     if (S.client) {
-      pts.push([S.client.lat, S.client.lng]);
-      L.marker([S.client.lat, S.client.lng], { zIndexOffset: 1000, icon: L.divIcon({ className: '', iconSize: [0, 0], iconAnchor: [11, 11],
-        html: '<div class="bm-pin bm-client"><b></b><span>CLIENT · ' + esc(S.client.suburb || '') + '</span></div>' }) }).addTo(S.layer);
+      pts.push([S.client.lng, S.client.lat]);
+      addMarker(S.client.lng, S.client.lat, '<div class="bm-pin bm-client"><b></b><span>CLIENT · ' + esc(S.client.suburb || '') + '</span></div>', 5);
     }
     if (fit) {
-      if (S.client && S.opts[S.sel]) S.map.setView([S.client.lat, S.client.lng], 12);
-      else if (pts.length) S.map.fitBounds(pts, { padding: [40, 40], maxZoom: 13 });
+      if (S.client) S.map.flyTo({ center: [S.client.lng, S.client.lat], zoom: 12.3, pitch: S.is3d === false ? 0 : 55, bearing: -10, duration: 1200 });
+      else if (pts.length > 1) {
+        var b = new maplibregl.LngLatBounds(pts[0], pts[0]); pts.forEach(function (p) { b.extend(p); });
+        S.map.fitBounds(b, { padding: 70, maxZoom: 13, pitch: S.is3d === false ? 0 : 50 });
+      }
     }
   }
 
@@ -486,9 +531,9 @@
       injectCss();
       if (!el('bm-root')) shell();
       render();
-      loadLeaflet().then(function () {
+      loadMapLib().then(function () {
         if (!S.loaded && !S.loading) load();
-        setTimeout(function () { initMap(); if (S.map) S.map.invalidateSize(); renderMap(); }, 50);
+        setTimeout(function () { initMap(); if (S.map) S.map.resize(); renderMap(); }, 50);
       }).catch(function (e) { S.error = e.message; render(); });
     }
   };
