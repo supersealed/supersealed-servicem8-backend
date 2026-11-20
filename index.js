@@ -411,6 +411,93 @@ app.put('/api/checklists', requireDashboardAuth, async (req, res) => {
     }
 });
 
+// ----- Booking Map (read-only) -----
+// One call that returns the scheduled bookings for a date range, the staff
+// they are allocated to, and the location of each booked job. Prices and
+// notes are NOT included. Nothing here writes to ServiceM8.
+async function sm8Get(endpoint, filter) {
+    const url = filter ? `${endpoint}?$filter=${encodeURIComponent(filter)}` : endpoint;
+    const response = await servicem8Client.get(url);
+    return Array.isArray(response.data) ? response.data : [];
+}
+
+app.get('/api/schedule', requireDashboardAuth, async (req, res) => {
+    try {
+          if (!SERVICEM8_API_KEY) {
+                  return res.status(400).json({ status: 'error', message: 'SERVICEM8_API_KEY environment variable is not set' });
+          }
+          const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+          const today = new Date().toISOString().slice(0, 10);
+          const from = isDate(req.query.from) ? req.query.from : today;
+          const to = isDate(req.query.to) ? req.query.to : new Date(Date.now() + 92 * 86400000).toISOString().slice(0, 10);
+
+          // Scheduled bookings in range (fall back to a simpler filter if the combined one is rejected)
+          let activities;
+          try {
+                  activities = await sm8Get('/jobactivity.json',
+                          `start_date gt '${from} 00:00:00' and start_date lt '${to} 23:59:59' and active eq 1`);
+          } catch (e) {
+                  activities = await sm8Get('/jobactivity.json', `start_date gt '${from} 00:00:00'`);
+          }
+          activities = activities.filter(a =>
+                  String(a.active) === '1' &&
+                  String(a.activity_was_scheduled) !== '0' &&
+                  a.start_date && a.start_date.slice(0, 10) <= to &&
+                  a.staff_uuid && a.job_uuid);
+
+          const staff = (await sm8Get('/staff.json', 'active eq 1'))
+                  .map(s => ({ uuid: s.uuid, first: s.first || '', last: s.last || '' }));
+
+          // Job locations: pull open jobs in two calls, then any stragglers one by one
+          const needed = new Set(activities.map(a => a.job_uuid));
+          const jobs = {};
+          const keep = (j) => {
+                  if (!needed.has(j.uuid)) return;
+                  const lat = parseFloat(j.lat || j.geo_lat || 0);
+                  const lng = parseFloat(j.lng || j.geo_lng || 0);
+                  jobs[j.uuid] = {
+                          address: (j.job_address || '').replace(/\s*\n\s*/g, ', '),
+                          suburb: j.geo_city || '',
+                          lat: lat || null,
+                          lng: lng || null,
+                          status: j.status || ''
+                  };
+          };
+          for (const st of ['Work Order', 'Quote']) {
+                  try { (await sm8Get('/job.json', `status eq '${st}'`)).forEach(keep); } catch (e) { /* keep going */ }
+          }
+          const missing = [...needed].filter(u => !jobs[u]).slice(0, 40);
+          await Promise.all(missing.map(async (u) => {
+                  try { const r = await servicem8Client.get(`/job/${u}.json`); keep(r.data); } catch (e) { /* skip */ }
+          }));
+
+          res.json({
+                  status: 'success',
+                  from, to,
+                  staff,
+                  activities: activities.map(a => ({
+                          job_uuid: a.job_uuid, staff_uuid: a.staff_uuid,
+                          start: a.start_date, end: a.end_date
+                  })),
+                  jobs
+          });
+    } catch (error) {
+          res.status(500).json({
+                  status: 'error',
+                  message: 'Failed to load the schedule from ServiceM8',
+                  error: error.response ? `${error.response.status} ${JSON.stringify(error.response.data).slice(0, 200)}` : error.message
+          });
+    }
+});
+
+// Static files used by the Booking Map tab (behind the same login)
+app.get('/booking-map.js', requireDashboardAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'booking-map.js'));
+});
+app.get('/regions.json', requireDashboardAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'regions.json'));
+});
+
 // Serve the dashboard page itself
 app.get('/dashboard', requireDashboardAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
