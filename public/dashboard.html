@@ -1018,6 +1018,7 @@
             <div class="nav-item" onclick="switchPage('escalations')">🚨 Escalations</div>
             <div class="nav-item" onclick="switchPage('daily-report')">📊 Daily Report</div>
             <div class="nav-item" onclick="switchPage('lead-report')">📈 Lead Source Report</div>
+            <div class="nav-item" onclick="switchPage('booking-map')">🗺️ Booking Map</div>
         </div>
 
         <!-- MAIN CONTENT -->
@@ -1114,6 +1115,11 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+
+                <!-- BOOKING MAP PAGE -->
+                <div class="page" id="booking-map-page">
+                    <div id="booking-map-root"></div>
                 </div>
 
                 <!-- ADD NEW ENQUIRY PAGE -->
@@ -2040,7 +2046,8 @@
                 'followup-queue': { el: 'followup-queue-page', title: 'Follow-Up Queue', nav: 3 },
                 'escalations': { el: 'escalations-page', title: 'Manager Escalations', nav: 4 },
                 'daily-report': { el: 'daily-report-page', title: 'Daily Admin Report', nav: 5 },
-                'lead-report': { el: 'lead-report-page', title: 'Lead Source Report', nav: 6 }
+                'lead-report': { el: 'lead-report-page', title: 'Lead Source Report', nav: 6 },
+                'booking-map': { el: 'booking-map-page', title: 'Booking Map', nav: 7 }
             };
 
             const pageInfo = pageMap[page];
@@ -2057,6 +2064,7 @@
                 if (page === 'escalations') renderEscalations();
                 if (page === 'daily-report') renderDailyReport();
                 if (page === 'lead-report') renderLeadReport();
+                if (page === 'booking-map' && window.BookingMap) window.BookingMap.open();
 
                 // Close mobile sidebar after navigation
                 if (window.innerWidth <= 768) {
@@ -3578,5 +3586,6 @@
             initServiceM8Sync();
         });
     </script>
+    <script src="/booking-map.js"></script>
 </body>
 </html>
