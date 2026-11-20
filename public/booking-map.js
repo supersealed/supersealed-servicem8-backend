@@ -131,6 +131,32 @@
       '#bm-root .bm-num{width:28px;height:28px;flex:none;border-radius:50%;color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}' +
       '#bm-root .bm-empty{border:2px dashed #B9C6CF;border-radius:14px;padding:24px;text-align:center;color:#4A5B67;background:#fff}' +
       '#bm-root .bm-err{background:#FDECEC;border:1px solid #F3B4B4;color:#8A1C1C;border-radius:10px;padding:12px 14px}' +
+      '@media (max-width:760px){' +
+      '#bm-root{gap:12px;font-size:16px}' +
+      '#bm-root .bm-card{padding:14px;border-radius:12px}' +
+      '#bm-root .bm-modes{display:grid;grid-template-columns:1fr 1fr;gap:8px}' +
+      '#bm-root .bm-mode{min-height:64px;padding:10px 12px;flex:none}' +
+      '#bm-root .bm-mode b{font-size:15px}#bm-root .bm-mode span{display:none}' +
+      '#bm-root .bm-row{gap:14px}#bm-root .bm-addr{flex:1 1 100%}' +
+      '#bm-root .bm-addr input{height:52px;font-size:16px}' +
+      '#bm-root .bm-step button{width:56px;height:52px}#bm-root .bm-step div{flex:1;height:52px}' +
+      '#bm-root .bm-step{width:100%}#bm-daysbox{width:100%}' +
+      '#bm-root .bm-cards{grid-template-columns:1fr;gap:10px}' +
+      '#bm-root .bm-when{font-size:19px}' +
+      '#bm-root .bm-btn{min-height:50px;font-size:16px}' +
+      '#bm-root .bm-maphead .bm-day{min-width:0;flex:1;font-size:15px}' +
+      '#bm-root .bm-maphead .bm-h{width:100%}' +
+      '#bm-root .bm-chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}' +
+      '#bm-root .bm-chip{flex:none}' +
+      '#bm-root .bm-cal{gap:4px}' +
+      '#bm-root .bm-cal button{min-height:54px;padding:5px 6px}' +
+      '#bm-root .bm-cal button b{font-size:15px}' +
+      '#bm-root .bm-cal button span{font-size:9.5px;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '#bm-map{height:62vh;min-height:380px}' +
+      '#bm-root .bm-run{grid-template-columns:1fr}' +
+      '.bm-pin span{font-size:11px;padding:2px 5px}' +
+      '#bm-root .bm-3d{width:100%}' +
+      '}' +
       '.bm-pin{display:flex;align-items:center;gap:5px;white-space:nowrap}' +
       '.bm-pin b{width:26px;height:26px;border-radius:50%;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)}' +
       '.bm-pin span{background:#fff;border-radius:6px;padding:3px 7px;font-size:12px;font-weight:700;color:#13212B;box-shadow:0 1px 4px rgba(0,0,0,.2)}' +
@@ -224,6 +250,7 @@
   function pick(s) {
     S.client = s; S.query = s.label; el('bm-q').value = s.label; S.suggestions = []; S.sel = 0;
     renderSuggest(); compute(); render();
+    if (window.innerWidth <= 760 && el('bm-title')) el('bm-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (S.opts[0]) { S.dayIdx = S.opts[0].dayIdx; }
     renderMap(true);
   }
