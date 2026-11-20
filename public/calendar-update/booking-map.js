@@ -1,0 +1,606 @@
+/* SuperSealed Booking Map
+ * Finds the best day/slot to offer a client based on where staff are already
+ * booked in ServiceM8. Read-only: it never changes anything in ServiceM8.
+ * Data comes from /api/schedule (server-side proxy, API key never in the browser).
+ */
+(function () {
+  'use strict';
+
+  // ---------- settings (edit here) ----------
+  var CFG = {
+    // First names (lower case) of staff who do inspections / quotes.
+    inspectionStaff: ['christian', 'chris', 'tarso'],
+    // First names (lower case) to never show (office/admin staff).
+    hiddenStaff: ['ali', 'crisia', 'chrisia', 'dina', 'dinah', 'elie'],
+    dayStart: 8 * 60,          // 8:00am
+    dayEnd: 17 * 60,           // 5:00pm
+    inspectionMinutes: 90,     // length of an inspection visit
+    travelBufferMinutes: 30,   // gap kept after the previous job
+    horizonDays: 92,           // ~3 months ahead
+    office: { lat: -37.6545, lng: 145.0256, name: 'the office (Epping)' },
+    melbBox: '144.5,-38.5,145.7,-37.3'
+  };
+  var COLORS = ['#0B6E6A', '#6B4FA0', '#1D5FD1', '#A16207', '#3F7F1F', '#475569', '#B4235A', '#0E7490', '#7C3AED', '#9A3412'];
+  var REGION_STYLE = {
+    'Inner': '#B9AEA4', 'North': '#8FADCF', 'East': '#8DBB91',
+    'South East': '#D4B66D', 'West': '#AD9CCB', 'Peninsula': '#D69C80'
+  };
+
+  // ---------- state ----------
+  var S = {
+    mode: 'quote', query: '', client: null, ndays: 2, dayIdx: 0,
+    hidden: {}, sel: 0, loaded: false, loading: false, error: null,
+    staff: [], acts: [], jobs: {}, days: [], byStaffDay: {}, opts: [],
+    map: null, layer: null, regions: null, suggestTimer: null, suggestions: []
+  };
+
+  // ---------- helpers ----------
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  var DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var DOWL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var MONL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  function dShort(d) { return DOW[d.getDay()] + ' ' + d.getDate() + ' ' + MON[d.getMonth()]; }
+  function dLong(d) { return DOWL[d.getDay()] + ' ' + d.getDate() + ' ' + MONL[d.getMonth()]; }
+  function hm(mins) { var h = Math.floor(mins / 60), m = mins % 60, ap = h >= 12 ? 'pm' : 'am'; var h12 = h % 12 || 12; return h12 + ':' + pad(m) + ap; }
+  function parseSm8(s) { // "YYYY-MM-DD HH:MM:SS" local Melbourne time
+    if (!s || s.indexOf('0000-00-00') === 0) return null;
+    var p = s.split(/[- :]/).map(Number);
+    return { date: s.slice(0, 10), mins: p[3] * 60 + p[4] };
+  }
+  function km(a, b) {
+    var R = 6371, t = Math.PI / 180, dLa = (b.lat - a.lat) * t, dLo = (b.lng - a.lng) * t;
+    var h = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function driveMins(d) { return Math.round(d * 1.6 + 5); } // rough Melbourne estimate
+  function suburbOf(job) { return job.suburb || (job.address || '').split(',').slice(-2, -1)[0] || job.address || 'job'; }
+  function staffName(s) { var n = (s.first || s.name || 'Staff').trim(); return n.charAt(0).toUpperCase() + n.slice(1); }
+  function isInspector(s) { return CFG.inspectionStaff.indexOf((s.first || '').trim().toLowerCase()) >= 0; }
+
+  function pointInRing(pt, ring) {
+    var x = pt.lng, y = pt.lat, inside = false;
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+  function regionOf(pt) {
+    if (!S.regions || !pt) return null;
+    for (var i = 0; i < S.regions.features.length; i++) {
+      var f = S.regions.features[i], g = f.geometry;
+      var polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+      for (var k = 0; k < polys.length; k++) if (pointInRing(pt, polys[k][0])) return f.properties.region;
+    }
+    return null;
+  }
+
+  // ---------- styles + layout ----------
+  function injectCss() {
+    if (el('bm-style')) return;
+    var css = '' +
+      '#bm-root{display:flex;flex-direction:column;gap:16px;font-size:15px}' +
+      '#bm-root .bm-card{background:#fff;border:1px solid #DDE3E8;border-radius:14px;padding:18px}' +
+      '#bm-root .bm-modes{display:flex;flex-wrap:wrap;gap:12px}' +
+      '#bm-root .bm-mode{flex:1 1 280px;min-height:78px;padding:12px 18px;border-radius:14px;border:2px solid #B9C6CF;background:#fff;color:#13212B;text-align:left;cursor:pointer}' +
+      '#bm-root .bm-mode b{display:block;font-size:19px}#bm-root .bm-mode span{font-size:13px}' +
+      '#bm-root .bm-mode.on{background:#0E2A3B;color:#fff;border-color:#0E2A3B}' +
+      '#bm-root .bm-row{display:flex;flex-wrap:wrap;gap:18px 28px;align-items:flex-start}' +
+      '#bm-root label.bm-h,#bm-root .bm-h{font-size:16px;font-weight:800;display:block;margin-bottom:8px}' +
+      '#bm-root .bm-addr{position:relative;flex:1 1 420px;min-width:0}' +
+      '#bm-root .bm-addr input{width:100%;box-sizing:border-box;height:54px;border:2px solid #B9C6CF;border-radius:12px;padding:0 16px;font-size:17px}' +
+      '#bm-root .bm-sug{position:absolute;left:0;right:0;top:100%;z-index:1000;background:#fff;border:1px solid #DDE3E8;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.12);overflow:hidden}' +
+      '#bm-root .bm-sug button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #EEF1F3;background:#fff;padding:12px 14px;font-size:15px;cursor:pointer}' +
+      '#bm-root .bm-sug button:hover{background:#F3F5F7}' +
+      '#bm-root .bm-step{display:flex;align-items:center;gap:10px}' +
+      '#bm-root .bm-step button{width:54px;height:54px;border-radius:12px;border:2px solid #B9C6CF;background:#fff;font-size:26px;font-weight:700;cursor:pointer}' +
+      '#bm-root .bm-step div{min-width:100px;height:54px;border-radius:12px;background:#0E2A3B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800}' +
+      '#bm-root .bm-note{font-size:13px;color:#4A5B67;margin-top:6px}' +
+      '#bm-root .bm-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}' +
+      '#bm-root .bm-opt{background:#fff;border:1px solid #DDE3E8;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:7px}' +
+      '#bm-root .bm-opt.on{border:3px solid #1F8A57;box-shadow:0 4px 14px rgba(14,42,59,.12)}' +
+      '#bm-root .bm-rank{font-size:12px;font-weight:800;letter-spacing:.08em;color:#4A5B67}' +
+      '#bm-root .bm-when{font-size:21px;font-weight:800;line-height:1.2}' +
+      '#bm-root .bm-who{font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px}' +
+      '#bm-root .bm-dot{width:14px;height:14px;border-radius:50%;display:inline-block;flex:none}' +
+      '#bm-root .bm-why{font-size:14px;color:#4A5B67}' +
+      '#bm-root .bm-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}' +
+      '#bm-root .bm-btn{flex:1 1 110px;min-height:46px;border-radius:10px;border:2px solid #B9C6CF;background:#fff;font-size:15px;font-weight:700;cursor:pointer}' +
+      '#bm-root .bm-btn.dark{background:#0E2A3B;color:#fff;border-color:#0E2A3B}' +
+      '#bm-root .bm-badge{font-size:12px;font-weight:800;padding:4px 10px;border-radius:10px}' +
+      '#bm-root .bm-maphead{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px}' +
+      '#bm-root .bm-maphead .bm-day{min-width:230px;text-align:center;font-size:18px;font-weight:800}' +
+      '#bm-root .bm-arrow{width:46px;height:46px;border-radius:10px;border:1px solid #B9C6CF;background:#fff;font-size:20px;cursor:pointer}' +
+      '#bm-root .bm-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}' +
+      '#bm-root .bm-chip{min-height:40px;padding:0 14px;border-radius:20px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px}' +
+      '#bm-root .bm-link{border:0;background:none;color:#0B6E6A;font-weight:700;text-decoration:underline;cursor:pointer;font-size:14px}' +
+      '#bm-root .bm-cal{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}' +
+      '#bm-root .bm-cal .hd{font-size:13px;font-weight:800;color:#4A5B67;text-align:center;padding:2px 0}' +
+      '#bm-root .bm-cal button{min-height:74px;border-radius:10px;border:1px solid #DDE3E8;background:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;padding:8px 10px;text-align:left;color:#13212B}' +
+      '#bm-root .bm-cal button b{font-size:18px}#bm-root .bm-cal button span{font-size:12px;font-weight:700}' +
+      '#bm-root .bm-cal button.sel{outline:3px solid #0E2A3B;outline-offset:1px}' +
+      '#bm-root .bm-cal button:disabled{opacity:.35;cursor:default}' +
+      '#bm-map{height:720px;border-radius:12px;border:1px solid #C9D3D9;overflow:hidden}' + '#bm-root .bm-3d{min-height:46px;padding:0 16px;border-radius:10px;border:2px solid #0E2A3B;background:#0E2A3B;color:#fff;font-weight:800;cursor:pointer}' +
+      '#bm-root .bm-run{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin-top:12px}' +
+      '#bm-root .bm-runitem{display:flex;gap:10px;align-items:center;border:1px solid #DDE3E8;border-radius:10px;padding:9px 12px;font-size:13px}' +
+      '#bm-root .bm-runitem.free{border:2px dashed #3CA571;background:#F2FBF6}' +
+      '#bm-root .bm-num{width:28px;height:28px;flex:none;border-radius:50%;color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}' +
+      '#bm-root .bm-empty{border:2px dashed #B9C6CF;border-radius:14px;padding:24px;text-align:center;color:#4A5B67;background:#fff}' +
+      '#bm-root .bm-err{background:#FDECEC;border:1px solid #F3B4B4;color:#8A1C1C;border-radius:10px;padding:12px 14px}' +
+      '.bm-pin{display:flex;align-items:center;gap:5px;white-space:nowrap}' +
+      '.bm-pin b{width:26px;height:26px;border-radius:50%;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)}' +
+      '.bm-pin span{background:#fff;border-radius:6px;padding:3px 7px;font-size:12px;font-weight:700;color:#13212B;box-shadow:0 1px 4px rgba(0,0,0,.2)}' +
+      '.bm-client b{background:#E11D48;width:22px;height:22px;box-shadow:0 0 0 7px rgba(225,29,72,.25),0 2px 6px rgba(0,0,0,.3)}' +
+      '.bm-client span{background:#E11D48;color:#fff}' +
+      '.bm-region{font:800 13px Arial,sans-serif;letter-spacing:.12em;color:rgba(14,42,59,.55);white-space:nowrap;text-shadow:0 0 3px #fff}' +
+      '.bm-compass{background:#fff;border-radius:50%;width:58px;height:58px;box-shadow:0 1px 6px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center}';
+    var s = document.createElement('style'); s.id = 'bm-style'; s.textContent = css; document.head.appendChild(s);
+  }
+
+  function loadMapLib() {
+    return new Promise(function (resolve, reject) {
+      if (window.maplibregl) return resolve();
+      var c = document.createElement('link'); c.rel = 'stylesheet'; c.href = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css'; document.head.appendChild(c);
+      var s = document.createElement('script'); s.src = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+      s.onload = function () { resolve(); }; s.onerror = function () { reject(new Error('Could not load the map library')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function shell() {
+    var root = el('booking-map-root');
+    root.innerHTML = '<div id="bm-root">' +
+      '<div class="bm-modes">' +
+      '<button class="bm-mode" data-mode="quote"><b>Book an inspection</b><span>Nearby free slot for an inspector</span></button>' +
+      '<button class="bm-mode" data-mode="job"><b>Schedule an approved job</b><span>First free days in a row for a technician</span></button>' +
+      '</div>' +
+      '<div class="bm-card bm-row">' +
+      '<div class="bm-addr"><label class="bm-h" for="bm-q">Client address</label>' +
+      '<input id="bm-q" autocomplete="off" placeholder="Start typing the street address…">' +
+      '<div class="bm-sug" id="bm-sug" style="display:none"></div>' +
+      '<div class="bm-note" id="bm-where"></div></div>' +
+      '<div id="bm-daysbox" style="display:none"><span class="bm-h">How many days is the job?</span>' +
+      '<div class="bm-step"><button id="bm-dn" aria-label="One day less">−</button><div id="bm-nd"></div><button id="bm-up" aria-label="One day more">+</button></div></div>' +
+      '</div>' +
+      '<div><div class="bm-h" style="font-size:19px" id="bm-title">Options</div><div id="bm-status"></div><div class="bm-cards" id="bm-cards"></div></div>' +
+      '<div class="bm-card"><div class="bm-maphead"><span class="bm-h" style="margin:0;font-size:19px">Calendar</span><span style="flex:1"></span>' +
+      '<button class="bm-arrow" id="bm-cprev" aria-label="Previous month">‹</button><span class="bm-day" id="bm-cmonth"></span>' +
+      '<button class="bm-arrow" id="bm-cnext" aria-label="Next month">›</button></div>' +
+      '<div class="bm-note" id="bm-ckey" style="margin:0 0 10px"></div>' +
+      '<div class="bm-cal" id="bm-cal"></div></div>' +
+      '<div class="bm-card">' +
+      '<div class="bm-maphead"><span class="bm-h" style="margin:0;font-size:19px">Map</span><span style="flex:1"></span>' +
+      '<button class="bm-arrow" id="bm-prev" aria-label="Previous day">‹</button><span class="bm-day" id="bm-day"></span>' +
+      '<button class="bm-arrow" id="bm-next" aria-label="Next day">›</button><button class="bm-3d" id="bm-3d">2D view</button></div>' +
+      '<div class="bm-chips" id="bm-chips"></div>' +
+      '<div id="bm-map"></div>' +
+      '<div class="bm-run" id="bm-run"></div>' +
+      '<div class="bm-note">Read-only view of the ServiceM8 schedule. Once the client says yes, book it in ServiceM8 as normal. Drive times are estimates.</div>' +
+      '</div></div>';
+
+    root.querySelectorAll('.bm-mode').forEach(function (b) {
+      b.onclick = function () { S.mode = b.getAttribute('data-mode'); S.sel = 0; compute(); render(); };
+    });
+    var q = el('bm-q');
+    q.oninput = function () { S.query = q.value; S.client = null; clearTimeout(S.suggestTimer); S.suggestTimer = setTimeout(suggest, 350); render(); };
+    q.onkeydown = function (e) { if (e.key === 'Enter' && S.suggestions[0]) { e.preventDefault(); pick(S.suggestions[0]); } };
+    el('bm-dn').onclick = function () { S.ndays = Math.max(1, S.ndays - 1); S.sel = 0; compute(); render(); };
+    el('bm-up').onclick = function () { S.ndays = Math.min(15, S.ndays + 1); S.sel = 0; compute(); render(); };
+    el('bm-prev').onclick = function () { S.dayIdx = Math.max(0, S.dayIdx - 1); renderMap(); };
+    el('bm-next').onclick = function () { S.dayIdx = Math.min(S.days.length - 1, S.dayIdx + 1); renderMap(); };
+    el('bm-3d').onclick = function () { set3d(S.is3d === false); };
+    el('bm-cprev').onclick = function () { S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth() - 1, 1); renderCal(); };
+    el('bm-cnext').onclick = function () { S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth() + 1, 1); renderCal(); };
+  }
+
+  // ---------- address search (Photon / OpenStreetMap) ----------
+  function suggest() {
+    var q = S.query.trim();
+    if (q.length < 3) { S.suggestions = []; renderSuggest(); return; }
+    fetch('https://photon.komoot.io/api/?limit=6&lang=en&bbox=' + CFG.melbBox + '&q=' + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        S.suggestions = (d.features || []).filter(function (f) { return (f.properties.state || '').indexOf('Victoria') >= 0; }).map(function (f) {
+          var p = f.properties;
+          var line = [p.housenumber ? p.housenumber + ' ' + (p.street || '') : (p.street || p.name || ''), p.city || p.district || p.locality || '', p.postcode || ''].filter(Boolean).join(', ');
+          return { label: line, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], suburb: p.city || p.district || p.locality || p.name || '' };
+        });
+        renderSuggest();
+      }).catch(function () { S.suggestions = []; renderSuggest(); });
+  }
+  function renderSuggest() {
+    var box = el('bm-sug');
+    if (!S.suggestions.length || S.client) { box.style.display = 'none'; return; }
+    box.innerHTML = '';
+    S.suggestions.forEach(function (s) {
+      var b = document.createElement('button'); b.textContent = s.label; b.onclick = function () { pick(s); }; box.appendChild(b);
+    });
+    box.style.display = 'block';
+  }
+  function pick(s) {
+    S.client = s; S.query = s.label; el('bm-q').value = s.label; S.suggestions = []; S.sel = 0;
+    renderSuggest(); compute(); render();
+    if (S.opts[0]) { S.dayIdx = S.opts[0].dayIdx; }
+    renderMap(true);
+  }
+
+  // ---------- data ----------
+  function load() {
+    if (S.loading) return;
+    S.loading = true; S.error = null; render();
+    var from = new Date(); var to = new Date(); to.setDate(to.getDate() + CFG.horizonDays);
+    Promise.all([
+      fetch('/api/schedule?from=' + ymd(from) + '&to=' + ymd(to)).then(function (r) { return r.json(); }),
+      fetch('/regions.json').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+    ]).then(function (res) {
+      var d = res[0]; S.regions = res[1];
+      if (!d || d.status !== 'success') throw new Error((d && d.message) || 'Could not load the schedule');
+      prepare(d);
+      return geocodeMissing();
+    }).then(function () {
+      S.loaded = true; S.loading = false; initMap(); drawRegions(); compute(); render(); renderMap(true);
+    }).catch(function (e) {
+      S.loading = false; S.error = e.message; render();
+    });
+  }
+
+  function prepare(d) {
+    S.jobs = d.jobs || {};
+    var used = {};
+    S.acts = (d.activities || []).map(function (a) {
+      var st = parseSm8(a.start), en = parseSm8(a.end);
+      if (!st) return null;
+      used[a.staff_uuid] = true;
+      return { job: a.job_uuid, staff: a.staff_uuid, date: st.date, start: st.mins, end: en && en.date === st.date ? en.mins : st.mins + 120 };
+    }).filter(Boolean);
+    S.staff = (d.staff || []).filter(function (s) {
+      return used[s.uuid] && CFG.hiddenStaff.indexOf((s.first || '').trim().toLowerCase()) < 0;
+    }).sort(function (a, b) { return (isInspector(b) - isInspector(a)) || staffName(a).localeCompare(staffName(b)); });
+    S.staff.forEach(function (s, i) { s.color = COLORS[i % COLORS.length]; s.inspector = isInspector(s); });
+    // working days
+    S.days = []; var d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    for (var i = 0; i <= CFG.horizonDays; i++) {
+      var x = new Date(d0); x.setDate(d0.getDate() + i);
+      if (x.getDay() !== 0 && x.getDay() !== 6) S.days.push(x);
+    }
+    S.byStaffDay = {};
+    S.acts.forEach(function (a) {
+      var k = a.staff + '|' + a.date; (S.byStaffDay[k] = S.byStaffDay[k] || []).push(a);
+    });
+    Object.keys(S.byStaffDay).forEach(function (k) { S.byStaffDay[k].sort(function (a, b) { return a.start - b.start; }); });
+  }
+
+  // Jobs without coordinates from ServiceM8 get geocoded once and cached in the browser.
+  function geocodeMissing() {
+    var cache = {}; try { cache = JSON.parse(localStorage.getItem('bm_geo') || '{}'); } catch (e) {}
+    var todo = [];
+    Object.keys(S.jobs).forEach(function (u) {
+      var j = S.jobs[u];
+      if (j.lat && j.lng) return;
+      if (cache[j.address]) { j.lat = cache[j.address][0]; j.lng = cache[j.address][1]; return; }
+      if (j.address) todo.push(j);
+    });
+    todo = todo.slice(0, 40);
+    var i = 0;
+    function next() {
+      if (i >= todo.length) { try { localStorage.setItem('bm_geo', JSON.stringify(cache)); } catch (e) {} return Promise.resolve(); }
+      var j = todo[i++];
+      return fetch('https://photon.komoot.io/api/?limit=1&bbox=' + CFG.melbBox + '&q=' + encodeURIComponent(j.address))
+        .then(function (r) { return r.json(); })
+        .then(function (d) { var f = d.features && d.features[0]; if (f) { j.lat = f.geometry.coordinates[1]; j.lng = f.geometry.coordinates[0]; cache[j.address] = [j.lat, j.lng]; } })
+        .catch(function () {}).then(next);
+    }
+    return next();
+  }
+
+  function dayActs(staffUuid, dayIdx) { var d = S.days[dayIdx]; return d ? (S.byStaffDay[staffUuid + '|' + ymd(d)] || []) : []; }
+  function jobPt(a) { var j = S.jobs[a.job]; return j && j.lat && j.lng ? { lat: +j.lat, lng: +j.lng } : null; }
+  function freeGaps(acts) {
+    var gaps = [], t = CFG.dayStart;
+    acts.forEach(function (a) { if (a.start - t >= 60) gaps.push([t, a.start]); t = Math.max(t, a.end); });
+    if (CFG.dayEnd - t >= 60) gaps.push([t, CFG.dayEnd]);
+    return gaps;
+  }
+
+  // ---------- the brains ----------
+  function compute() {
+    S.opts = []; S.dayBest = {}; S.dayRun = {};
+    if (!S.loaded || !S.client) return;
+    var c = S.client, visible = S.staff.filter(function (s) { return !S.hidden[s.uuid]; });
+    if (S.mode === 'quote') {
+      var opts = [];
+      visible.filter(function (s) { return s.inspector; }).forEach(function (s) {
+        S.days.forEach(function (d, di) {
+          var acts = dayActs(s.uuid, di);
+          var nowM = new Date().getHours() * 60 + new Date().getMinutes();
+          var gaps = freeGaps(acts), best = null;
+          gaps.forEach(function (g) {
+            // the job right before and after this gap
+            var before = acts.filter(function (a) { return a.end <= g[0]; }).pop();
+            var after = acts.filter(function (a) { return a.start >= g[1]; })[0];
+            var startAt = before ? g[0] + CFG.travelBufferMinutes : g[0];
+            startAt = Math.ceil(startAt / 30) * 30;
+            if (di === 0) startAt = Math.max(startAt, Math.ceil((nowM + 120) / 30) * 30); // not in the past / too soon
+            if (startAt + CFG.inspectionMinutes > g[1] - (after ? CFG.travelBufferMinutes : 0)) return;
+            var ref = before || after, pt = ref ? jobPt(ref) : CFG.office;
+            if (!pt) return;
+            var dist = km(c, pt);
+            if (!best || dist < best.dist) best = { dist: dist, start: startAt, from: ref ? (hm(ref.start) + ' job in ' + suburbOf(S.jobs[ref.job] || {})) : CFG.office.name };
+          });
+          if (best) opts.push({ staff: s, dayIdx: di, slot: best.start, dist: best.dist, from: best.from, score: best.dist + di * 0.12 });
+        });
+      });
+      opts.forEach(function (o) { var cur = S.dayBest[o.dayIdx]; if (!cur || o.dist < cur.dist) S.dayBest[o.dayIdx] = o; });
+      opts.sort(function (a, b) { return a.score - b.score; });
+      var seen = {};
+      S.opts = opts.filter(function (o) { var k = o.dayIdx + '|' + o.staff.uuid; if (seen[k]) return false; seen[k] = 1; return true; }).slice(0, 3);
+    } else {
+      var n = S.ndays, out = [];
+      visible.filter(function (s) { return !s.inspector; }).forEach(function (s) {
+        for (var ci = 0; ci + n <= S.days.length; ci++) {
+          var okc = true;
+          for (var kc = 0; kc < n; kc++) if (dayActs(s.uuid, ci + kc).length) { okc = false; break; }
+          if (okc) (S.dayRun[ci] = S.dayRun[ci] || []).push(staffName(s));
+        }
+        var found = 0;
+        for (var i = 0; i + n <= S.days.length && found < 2; i++) {
+          var ok = true;
+          for (var k = 0; k < n; k++) if (dayActs(s.uuid, i + k).length) { ok = false; break; }
+          if (!ok) continue;
+          var prev = null;
+          for (var b = i - 1; b >= 0 && b >= i - 5 && !prev; b--) { var pa = dayActs(s.uuid, b); if (pa.length) prev = { a: pa[pa.length - 1], di: b }; }
+          var ppt = prev ? jobPt(prev.a) : null;
+          out.push({ staff: s, dayIdx: i, endIdx: i + n - 1, prev: prev, dist: ppt ? km(c, ppt) : km(c, CFG.office) });
+          found++; i += n - 1;
+        }
+      });
+      out.sort(function (a, b) { return a.dayIdx - b.dayIdx || a.dist - b.dist; });
+      S.opts = out.slice(0, 3);
+    }
+  }
+
+  function optText(o) {
+    if (S.mode === 'quote') {
+      return {
+        when: dShort(S.days[o.dayIdx]) + ' · ' + hm(o.slot) + '–' + hm(o.slot + CFG.inspectionMinutes),
+        why: '≈' + driveMins(o.dist) + ' min drive from ' + o.from,
+        msg: 'Good news – we can come out on ' + dLong(S.days[o.dayIdx]) + ' between ' + hm(o.slot) + ' and ' + hm(o.slot + CFG.inspectionMinutes) + '. Does that suit you?',
+        badge: o.dist <= 5 ? ['Very close', '#DDF3E8', '#0F5C3A'] : o.dist <= 12 ? ['Close', '#FFF0D6', '#7A4A00'] : ['Further away', '#EEF1F3', '#4A5B67']
+      };
+    }
+    var w = S.ndays === 1 ? dShort(S.days[o.dayIdx]) : dShort(S.days[o.dayIdx]) + ' → ' + dShort(S.days[o.endIdx]);
+    var wl = S.ndays === 1 ? dLong(S.days[o.dayIdx]) : dLong(S.days[o.dayIdx]) + ' to ' + dLong(S.days[o.endIdx]);
+    return {
+      when: w,
+      why: (S.ndays === 1 ? 'Free all day' : S.ndays + ' free working days in a row') +
+        (o.prev ? ' · previous job ' + dShort(S.days[o.prev.di]) + ' in ' + suburbOf(S.jobs[o.prev.a.job] || {}) + ' (≈' + driveMins(o.dist) + ' min from client)' : ''),
+      msg: 'Great news – we can start your job on ' + wl + '. Does that work for you?',
+      badge: null
+    };
+  }
+
+  // ---------- rendering ----------
+  function render() {
+    if (!el('bm-root')) return;
+    document.querySelectorAll('#bm-root .bm-mode').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-mode') === S.mode); });
+    el('bm-daysbox').style.display = S.mode === 'job' ? 'block' : 'none';
+    el('bm-nd').textContent = S.ndays + (S.ndays === 1 ? ' day' : ' days');
+    var reg = S.client ? regionOf(S.client) : null;
+    el('bm-where').textContent = S.client ? ('Pin dropped: ' + (S.client.suburb || S.client.label) + (reg ? ' · ' + reg.toUpperCase() + ' side' : '')) : '';
+    el('bm-title').textContent = !S.client ? 'Options' : S.mode === 'quote' ? 'Best inspection slots' : 'First available for a ' + S.ndays + '-day job';
+    var st = el('bm-status');
+    if (S.error) st.innerHTML = '<div class="bm-err">Could not load the ServiceM8 schedule: ' + esc(S.error) + '. <button class="bm-link" id="bm-retry">Try again</button></div>';
+    else if (S.loading) st.innerHTML = '<div class="bm-empty">Loading the next 3 months of bookings from ServiceM8…</div>';
+    else if (!S.client) st.innerHTML = '<div class="bm-empty">Type the client’s address above and pick it from the list.</div>';
+    else if (!S.opts.length) st.innerHTML = '<div class="bm-empty">No free ' + (S.mode === 'quote' ? 'inspection slot' : S.ndays + '-day run') + ' found in the next 3 months for the staff shown.</div>';
+    else st.innerHTML = '';
+    if (el('bm-retry')) el('bm-retry').onclick = load;
+
+    var cards = el('bm-cards'); cards.innerHTML = '';
+    S.opts.forEach(function (o, i) {
+      var t = optText(o), div = document.createElement('div');
+      div.className = 'bm-opt' + (i === S.sel ? ' on' : '');
+      div.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="bm-rank">' + (i === 0 ? (S.mode === 'job' ? 'FIRST AVAILABLE' : 'BEST OPTION') : 'OPTION ' + (i + 1)) + '</span>' +
+        (t.badge ? '<span class="bm-badge" style="background:' + t.badge[1] + ';color:' + t.badge[2] + '">' + t.badge[0] + '</span>' : '') + '</div>' +
+        '<div class="bm-when">' + esc(t.when) + '</div>' +
+        '<div class="bm-who"><span class="bm-dot" style="background:' + o.staff.color + '"></span>' + esc(staffName(o.staff)) + '</div>' +
+        '<div class="bm-why">' + esc(t.why) + '</div>' +
+        '<div class="bm-btns"><button class="bm-btn dark" data-a="copy">Copy text for client</button><button class="bm-btn" data-a="map">See on map</button></div>';
+      div.querySelector('[data-a="copy"]').onclick = function (e) {
+        var b = e.currentTarget;
+        (navigator.clipboard ? navigator.clipboard.writeText(t.msg) : Promise.reject()).then(function () { b.textContent = 'Copied'; }, function () { window.prompt('Copy this text:', t.msg); });
+      };
+      div.querySelector('[data-a="map"]').onclick = function () { S.sel = i; S.dayIdx = o.dayIdx; render(); renderMap(true); el('bm-map').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+      cards.appendChild(div);
+    });
+
+    var chips = el('bm-chips'); chips.innerHTML = '<span style="font-size:14px;font-weight:700;color:#4A5B67">Show on map:</span>';
+    S.staff.forEach(function (s) {
+      var on = !S.hidden[s.uuid], b = document.createElement('button');
+      b.className = 'bm-chip'; b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.style.cssText = on ? 'background:' + s.color + ';color:#fff;border:2px solid ' + s.color : 'background:#fff;color:#4A5B67;border:2px dashed #B9C6CF';
+      b.innerHTML = '<span class="bm-dot" style="background:' + (on ? '#fff' : s.color) + '"></span>' + esc(staffName(s)) + (s.inspector ? ' <small style="opacity:.8;font-weight:600">· inspections</small>' : '');
+      b.onclick = function () { S.hidden[s.uuid] = !S.hidden[s.uuid]; S.sel = 0; compute(); render(); renderMap(); };
+      chips.appendChild(b);
+    });
+    var all = document.createElement('button'); all.className = 'bm-link'; all.textContent = 'All';
+    all.onclick = function () { S.hidden = {}; compute(); render(); renderMap(); };
+    var none = document.createElement('button'); none.className = 'bm-link'; none.textContent = 'None';
+    none.onclick = function () { S.staff.forEach(function (s) { S.hidden[s.uuid] = true; }); compute(); render(); renderMap(); };
+    chips.appendChild(all); chips.appendChild(none);
+    renderCal();
+  }
+
+  var REGION_LABELS = { 'North': [145.02, -37.52], 'East': [145.33, -37.80], 'South East': [145.24, -38.02], 'West': [144.74, -37.78], 'Peninsula': [145.10, -38.25], 'Inner': [144.985, -37.835] };
+
+  function drawRegions() {
+    if (!S.map || !S.mapReady || !S.regions || S.regionsDrawn) return;
+    S.regionsDrawn = true;
+    var colorExpr = ['match', ['get', 'region']];
+    Object.keys(REGION_STYLE).forEach(function (k) { colorExpr.push(k, REGION_STYLE[k]); });
+    colorExpr.push('#999999');
+    // put zone colours under the street names and 3D buildings
+    var firstSymbol = (S.map.getStyle().layers || []).filter(function (l) { return l.type === 'symbol'; })[0];
+    var before = firstSymbol ? firstSymbol.id : undefined;
+    S.map.addSource('bm-regions', { type: 'geojson', data: S.regions });
+    S.map.addLayer({ id: 'bm-regions-fill', type: 'fill', source: 'bm-regions', paint: { 'fill-color': colorExpr, 'fill-opacity': 0.22 } }, before);
+    S.map.addLayer({ id: 'bm-regions-line', type: 'line', source: 'bm-regions', paint: { 'line-color': colorExpr, 'line-width': 3, 'line-opacity': 0.9 } }, before);
+    var pts = { type: 'FeatureCollection', features: Object.keys(REGION_LABELS).map(function (k) {
+      return { type: 'Feature', properties: { name: k.toUpperCase() }, geometry: { type: 'Point', coordinates: REGION_LABELS[k] } };
+    }) };
+    S.map.addSource('bm-region-names', { type: 'geojson', data: pts });
+    if (S.map.getStyle().glyphs) S.map.addLayer({ id: 'bm-region-names', type: 'symbol', source: 'bm-region-names', maxzoom: 12,
+      layout: { 'text-field': ['get', 'name'], 'text-size': 22, 'text-letter-spacing': 0.25, 'text-font': ['Noto Sans Bold'], 'text-allow-overlap': true },
+      paint: { 'text-color': '#0E2A3B', 'text-opacity': 0.55, 'text-halo-color': '#ffffff', 'text-halo-width': 2 } });
+  }
+
+  function makeSuburbLabelsBigger() {
+    // Make suburb / town names larger and bolder so they read at a glance
+    (S.map.getStyle().layers || []).forEach(function (l) {
+      if (l.type !== 'symbol' || !/place|label_(city|town|village|other)|suburb|locality/i.test(l.id)) return;
+      try {
+        S.map.setPaintProperty(l.id, 'text-color', '#13212B');
+        S.map.setPaintProperty(l.id, 'text-halo-color', '#ffffff');
+        S.map.setPaintProperty(l.id, 'text-halo-width', 2);
+        var size = S.map.getLayoutProperty(l.id, 'text-size');
+        if (typeof size === 'number') S.map.setLayoutProperty(l.id, 'text-size', size * 1.3);
+      } catch (e) { /* layer without text */ }
+    });
+  }
+
+  function initMap() {
+    if (S.map || !window.maplibregl) return;
+    S.map = new maplibregl.Map({
+      container: 'bm-map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [145.02, -37.86], zoom: 9.6, pitch: 50, bearing: -10, maxPitch: 70,
+      attributionControl: { compact: true }
+    });
+    S.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true }), 'top-right');
+    S.map.on('load', function () {
+      S.map.addSource('bm-routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      S.map.addLayer({ id: 'bm-routes', type: 'line', source: 'bm-routes', layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': 0.85 } });
+      S.mapReady = true;
+      try { makeSuburbLabelsBigger(); } catch (e) { console.warn('[BookingMap] labels', e); }
+      try { drawRegions(); } catch (e) { console.warn('[BookingMap] regions', e); }
+      renderMap(true);
+    });
+    S.markers = [];
+  }
+
+  function set3d(on) {
+    S.is3d = on;
+    if (S.map) S.map.easeTo({ pitch: on ? 55 : 0, bearing: on ? -10 : 0, duration: 700 });
+    if (el('bm-3d')) el('bm-3d').textContent = on ? '2D view' : '3D view';
+  }
+
+  function addMarker(lng, lat, html, z) {
+    var d = document.createElement('div'); d.innerHTML = html; d.style.zIndex = z || 1;
+    var m = new maplibregl.Marker({ element: d, anchor: 'left', offset: [-13, 0] }).setLngLat([lng, lat]).addTo(S.map);
+    S.markers.push(m);
+  }
+
+  function renderCal() {
+    if (!el('bm-cal')) return;
+    if (!S.calMonth) { var t = new Date(); S.calMonth = new Date(t.getFullYear(), t.getMonth(), 1); }
+    var m = S.calMonth, idx = {};
+    S.days.forEach(function (d, i) { idx[ymd(d)] = i; });
+    var first = S.days[0], last = S.days[S.days.length - 1];
+    el('bm-cmonth').textContent = MONL[m.getMonth()] + ' ' + m.getFullYear();
+    el('bm-cprev').disabled = !first || (m.getFullYear() * 12 + m.getMonth()) <= (first.getFullYear() * 12 + first.getMonth());
+    el('bm-cnext').disabled = !last || (m.getFullYear() * 12 + m.getMonth()) >= (last.getFullYear() * 12 + last.getMonth());
+    el('bm-ckey').textContent = !S.client ? 'Number of bookings each day. Type a client address to see the best days.'
+      : S.mode === 'quote' ? 'Green = inspector very close and free · Amber = close · Grey = further away · White = no free inspection slot'
+      : 'Green = a technician is free for ' + S.ndays + ' day' + (S.ndays > 1 ? 's in a row' : '') + ' starting that day';
+    var cal = el('bm-cal'); cal.innerHTML = '';
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].forEach(function (h) { var d = document.createElement('div'); d.className = 'hd'; d.textContent = h; cal.appendChild(d); });
+    var d1 = new Date(m.getFullYear(), m.getMonth(), 1), pad0 = (d1.getDay() + 6) % 7; // Mon=0
+    for (var p = 0; p < Math.min(pad0, 5); p++) cal.appendChild(document.createElement('div'));
+    var visible = S.staff.filter(function (s) { return !S.hidden[s.uuid]; });
+    for (var day = 1; day <= 31; day++) {
+      var dt = new Date(m.getFullYear(), m.getMonth(), day);
+      if (dt.getMonth() !== m.getMonth()) break;
+      if (dt.getDay() === 0 || dt.getDay() === 6) continue;
+      var b = document.createElement('button'), di = idx[ymd(dt)], label = '', bg = '#fff', fg = '#4A5B67';
+      if (di === undefined) { b.disabled = true; }
+      else if (!S.client) {
+        var n = 0; visible.forEach(function (s) { n += dayActs(s.uuid, di).length; });
+        label = n + (n === 1 ? ' booking' : ' bookings');
+      } else if (S.mode === 'quote') {
+        var o = S.dayBest[di];
+        if (!o) { label = 'Full'; }
+        else if (o.dist <= 5) { label = 'Very close · ' + staffName(o.staff); bg = '#2E9E66'; fg = '#fff'; }
+        else if (o.dist <= 12) { label = 'Close · ' + staffName(o.staff); bg = '#F2B544'; fg = '#13212B'; }
+        else { label = 'Far · ' + staffName(o.staff); bg = '#EEF1F3'; fg = '#4A5B67'; }
+      } else {
+        var r = S.dayRun[di];
+        if (r && r.length) { label = 'Free: ' + r.join(', '); bg = '#2E9E66'; fg = '#fff'; } else { label = '—'; }
+      }
+      b.style.background = bg; b.style.color = fg;
+      b.innerHTML = '<b>' + day + '</b><span>' + esc(label) + '</span>';
+      b.setAttribute('aria-label', dLong(dt) + (label ? ': ' + label : ''));
+      if (di === S.dayIdx) b.className = 'sel';
+      if (di !== undefined) (function (i) { b.onclick = function () { S.dayIdx = i; renderCal(); renderMap(true); el('bm-map').scrollIntoView({ behavior: 'smooth', block: 'center' }); }; })(di);
+      cal.appendChild(b);
+    }
+  }
+
+  function renderMap(fit) {
+    if (!S.days.length) { if (el('bm-day')) el('bm-day').textContent = ''; return; }
+    el('bm-day').textContent = dLong(S.days[S.dayIdx]);
+    if (S.days[S.dayIdx]) { var dd = S.days[S.dayIdx]; if (!S.calMonth || S.calMonth.getMonth() !== dd.getMonth() || S.calMonth.getFullYear() !== dd.getFullYear()) S.calMonth = new Date(dd.getFullYear(), dd.getMonth(), 1); renderCal(); }
+    var run = el('bm-run'); run.innerHTML = '';
+    var lines = [], pts = [];
+    if (S.map && S.markers) { S.markers.forEach(function (m) { m.remove(); }); S.markers = []; }
+    S.staff.forEach(function (s) {
+      if (S.hidden[s.uuid]) return;
+      var acts = dayActs(s.uuid, S.dayIdx), line = [];
+      acts.forEach(function (a, i) {
+        var p = jobPt(a), j = S.jobs[a.job] || {};
+        var item = document.createElement('div'); item.className = 'bm-runitem';
+        item.innerHTML = '<span class="bm-num" style="background:' + s.color + '">' + (i + 1) + '</span><div><b>' + esc(staffName(s)) + ' · ' + hm(a.start) + '–' + hm(a.end) + '</b><br>' + esc(suburbOf(j)) + (p ? '' : ' (no map location)') + '</div>';
+        run.appendChild(item);
+        if (!p) return;
+        line.push([p.lng, p.lat]); pts.push([p.lng, p.lat]);
+        if (S.mapReady) addMarker(p.lng, p.lat, '<div class="bm-pin"><b style="background:' + s.color + '">' + (i + 1) + '</b><span>' + esc(staffName(s)) + ' · ' + hm(a.start) + ' · ' + esc(suburbOf(j)) + '</span></div>', 2);
+      });
+      if (line.length > 1) lines.push({ type: 'Feature', properties: { color: s.color }, geometry: { type: 'LineString', coordinates: line } });
+      freeGaps(acts).forEach(function (g) {
+        var item = document.createElement('div'); item.className = 'bm-runitem free';
+        item.innerHTML = '<span class="bm-num" style="background:#fff;border:2px dashed ' + s.color + '"></span><div><b>' + esc(staffName(s)) + ' · FREE ' + (acts.length ? hm(g[0]) + '–' + hm(g[1]) : 'ALL DAY') + '</b><br>Available to book</div>';
+        run.appendChild(item);
+      });
+    });
+    if (!S.mapReady) return;
+    S.map.getSource('bm-routes').setData({ type: 'FeatureCollection', features: lines });
+    if (S.client) {
+      pts.push([S.client.lng, S.client.lat]);
+      addMarker(S.client.lng, S.client.lat, '<div class="bm-pin bm-client"><b></b><span>CLIENT · ' + esc(S.client.suburb || '') + '</span></div>', 5);
+    }
+    if (fit) {
+      if (S.client) S.map.flyTo({ center: [S.client.lng, S.client.lat], zoom: 12.3, pitch: S.is3d === false ? 0 : 55, bearing: -10, duration: 1200 });
+      else if (pts.length > 1) {
+        var b = new maplibregl.LngLatBounds(pts[0], pts[0]); pts.forEach(function (p) { b.extend(p); });
+        S.map.fitBounds(b, { padding: 70, maxZoom: 13, pitch: S.is3d === false ? 0 : 50 });
+      }
+    }
+  }
+
+  // ---------- entry point (called by switchPage) ----------
+  window.BookingMap = {
+    open: function () {
+      injectCss();
+      if (!el('bm-root')) shell();
+      render();
+      loadMapLib().then(function () {
+        if (!S.loaded && !S.loading) load();
+        setTimeout(function () { initMap(); if (S.map) S.map.resize(); renderMap(); }, 50);
+      }).catch(function (e) { S.error = e.message; render(); });
+    }
+  };
+})();
